@@ -345,7 +345,9 @@ class LocalGitTests(unittest.TestCase):
 
     def test_corrupt_loose_object_is_unknown_without_raw_diagnostics(self):
         identifier = self.git('hash-object', '-w', '--stdin', data=TOKEN.encode())
-        (self.root / '.git/objects' / identifier[:2] / identifier[2:]).write_bytes(b'PRIVATE_SENTINEL')
+        path = self.root / '.git/objects' / identifier[:2] / identifier[2:]
+        path.unlink()  # Replace the disposable read-only Git object without root.
+        path.write_bytes(b'PRIVATE_SENTINEL')
         report, findings = self.collect()
         self.assertEqual(report['status'], 'partial')
         self.assertNotIn('PRIVATE_SENTINEL', json.dumps([report, findings]))

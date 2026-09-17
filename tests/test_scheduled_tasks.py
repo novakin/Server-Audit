@@ -135,8 +135,8 @@ class CollectorTests(unittest.TestCase):
         original = tasks.read_definition
         def read(path, script=False):
             content, metadata = original(path, script)
-            if path.name == 'shared.sh':
-                metadata['uid'] = 1001
+            # Model both owners; the temporary crontab need not be root-owned.
+            metadata['uid'] = 1001 if path.name == 'shared.sh' else 0
             return content, metadata
         with patch.object(tasks, 'read_definition', side_effect=read) as reader, patch('pwd.getpwnam', side_effect=lambda name: SimpleNamespace(pw_uid=1001 if name == 'alice' else 0)):
             report, findings = self.collect(lambda command: {'status': 'ok', 'output': ''})
