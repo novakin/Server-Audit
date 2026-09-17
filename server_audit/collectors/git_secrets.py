@@ -45,6 +45,65 @@ LIMITATIONS = [
 ]
 
 
+# Deliberately small, complete syntactic references; no evaluation or expansion.
+# A prefix alone (including "$", "<" or "os.environ") is never an exclusion.
+REFERENCE_VALUE = re.compile(
+    rb'\$\{[A-Za-z_][A-Za-z0-9_]*\}|\{\{[ \t]*[A-Za-z_][A-Za-z0-9_.]*[ \t]*\}\}')
+ENVIRONMENT_NAME = rb'''(?:"[A-Za-z_][A-Za-z0-9_]*"|'[A-Za-z_][A-Za-z0-9_]*')'''
+REFERENCE_EXPRESSION = re.compile(
+    rb'(?:process\.env\.[A-Za-z_][A-Za-z0-9_]*'
+    rb'|os\.environ\[[ \t]*' + ENVIRONMENT_NAME + rb'[ \t]*\]'
+    rb'|os\.(?:getenv|environ\.get)\([ \t]*' + ENVIRONMENT_NAME + rb'[ \t]*\))')
+
+
+def reference_ended(data, end):
+    """Require a delimiter or actual EOF within a bounded suffix, not a newline.
+
+    Skip only whitespace and familiar comments. This is not an expression or
+    automatic-semicolon-insertion parser: ambiguous continuations stay candidates.
+    """
+    tail = data[end:end + 257]
+    at_eof = end + len(tail) == len(data)
+    position = 0
+    while position < len(tail):
+        if tail[position] in b' \t\r\n\f\v':
+            position += 1
+        elif tail.startswith((b'\xe2\x80\xa8', b'\xe2\x80\xa9'), position):
+            position += 3  # JavaScript's other two line terminators (UTF-8).
+        elif tail.startswith(b'#', position) or tail.startswith(b'//', position):
+            # A comment can end before a continuation on the following line.
+            newline = re.search(rb'[\r\n]|\xe2\x80[\xa8\xa9]', tail[position:])
+            if newline is None:
+                return at_eof
+            position += newline.end()
+        elif tail.startswith(b'/*', position):
+            closing = tail.find(b'*/', position + 2)
+            if closing < 0:
+                return False  # Unterminated or truncated comment, even at EOF.
+            position = closing + 2
+        else:
+            return tail[position] in b',;}]'
+    return at_eof
+
+
+def excluded_assignment(data, match):
+    """Exclude exact placeholders/references, never a truncated candidate prefix."""
+    quoted = match.group(1) if match.group(1) is not None else match.group(2)
+    if quoted is not None:
+        value = quoted.strip()
+        if value.lower() not in PLACEHOLDERS and REFERENCE_VALUE.fullmatch(value) is None:
+            return False
+        return reference_ended(data, match.end())
+    if match.group(3).strip().lower() in PLACEHOLDERS:
+        return reference_ended(data, match.end())
+    # The candidate rule can stop before '(' or '['. Recognize the complete
+    # bounded reference first, then check its suffix across lines and comments.
+    start = match.start(3)
+    reference = REFERENCE_EXPRESSION.match(data, start, start + 257)
+    return (reference is not None and reference.end() - start <= 256
+            and reference_ended(data, reference.end()))
+
+
 def scan_seconds_value(value):
     if isinstance(value, bool):
         raise ValueError('Git scan seconds must be numeric, not boolean.')
@@ -61,10 +120,8 @@ def detections(data, location, kind, identifier, deadline):
         remaining(deadline)
         for match in pattern.finditer(data):
             remaining(deadline)
-            if rule == 'credential-assignment':
-                value = next(group for group in match.groups() if group is not None).strip()
-                if value.lower() in PLACEHOLDERS or value.startswith((b'$', b'${', b'{{', b'<', b'%(', b'os.environ', b'os.getenv', b'process.env.')):
-                    continue
+            if rule == 'credential-assignment' and excluded_assignment(data, match):
+                continue
             line = data.count(b'\n', 0, match.start()) + 1
             if (rule, line) in seen:
                 continue
@@ -225,13 +282,13 @@ def scan_repository(raw, executable, seconds):
             add_detections(repository, config_scan, data, name, 'configuration', None, deadline)
             if re.search(rb'(?im)^\s*\[include(?:if)?\b', data):
                 add_issue(repository, 'Included configuration is not followed; only local config files are inspected.')
+        if not config_present:
+            raise GitReadError('Repository config is missing; object format is unconfirmed. Object scan not attempted.')
         storage_complete = inspect_storage(directory, repository, deadline)
         if (directory / 'shallow').exists():
             add_issue(repository, 'Shallow repository observed; earlier missing history cannot be inspected.')
         with repository_view() as view:
-            algorithm, partial_clone = ('sha1', False)
-            if config_present:
-                algorithm, partial_clone = object_format(executable, view, directory / 'config', deadline)
+            algorithm, partial_clone = object_format(executable, view, directory / 'config', deadline)
             repository['object_format'] = algorithm
             if partial_clone:
                 add_issue(repository, 'Partial-clone storage observed; only objects already present are inspected.')
@@ -254,7 +311,7 @@ def scan_repository(raw, executable, seconds):
 
 def collect(roots=None, scan_seconds=SCAN_SECONDS):
     seconds = scan_seconds_value(scan_seconds)
-    result = {'status': 'not_requested', 'repositories': [], 'detector': 'builtin', 'ruleset_version': 1,
+    result = {'status': 'not_requested', 'repositories': [], 'detector': 'builtin', 'ruleset_version': 2,
               'rule_ids': [rule for rule, _ in RULES], 'limitations': list(LIMITATIONS),
               'limits': {'seconds_per_repository': seconds, 'objects': MAX_OBJECTS,
                          'bytes_per_object': MAX_OBJECT_BYTES, 'content_bytes_per_repository': MAX_TOTAL_BYTES,

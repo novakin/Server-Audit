@@ -38,7 +38,11 @@ Consumers needing all values should prefer the new map. For older reports withou
 
 ## Built-in Git secret evidence
 
-`checks.git_secrets` retains the `status`, `repositories` and `limitations` containers. The additive `detector: "builtin"`, `ruleset_version: 1`, `rule_ids` and `limits` identify the implementation and selected bounds even when the check is not requested. A requested scan without the approved local Git reader is `unavailable`, not a clean or skipped scan.
+`checks.git_secrets` retains the `status`, `repositories` and `limitations` containers. The additive `detector: "builtin"`, `ruleset_version: 2`, `rule_ids` and `limits` identify the implementation and selected bounds even when the check is not requested. A requested scan without the approved local Git reader is `unavailable`, not a clean or skipped scan.
+
+Ruleset 2 narrows assignment-reference exclusions; rule IDs, candidate regexes, limits and detection field types are unchanged. This can reveal candidates previously suppressed by broad prefixes. Host `schema_version` remains 1. Old reports retain their original detector/ruleset metadata and remain renderable; compare versions and scope before interpreting changed findings. See [reference exclusions](audit-reference.md#ruleset-2-reference-exclusions).
+
+A missing or unreadable primary Git `config` prevents object inspection for that repository. Its status and the overall Git status are partial, an Unknown finding explains the unconfirmed coverage, and neither a successful `local_objects` scan nor an invented `object_format` is emitted. Earlier configuration findings and subsequent repositories survive. Readable ordinary SHA-1 configuration still permits omitted optional format settings. Complete export manifests do not override these coverage failures.
 
 Each repository retains `path`, `status` and `scans`, and adds safe `issues`, `detections_found`, and `elapsed_seconds`. Successful scope resolution records `git_directory`; completed storage preflight records `storage_entries_examined`; recognized storage records `object_format`. Missing fields do not imply success. Current scan modes are:
 

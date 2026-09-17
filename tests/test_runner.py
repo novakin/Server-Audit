@@ -31,7 +31,7 @@ class RunnerTests(unittest.TestCase):
         # Intentional replacement: built-in local-object scope, not Gitleaks scans.
         expected_git = expected['report']['checks']['git_secrets']
         expected_git.update(
-            detector='builtin', ruleset_version=1,
+            detector='builtin', ruleset_version=2,  # Narrowed reference exclusions; fixture unchanged.
             rule_ids=['private-key', 'github-token', 'gitlab-token', 'aws-access-key-id',
                       'slack-token', 'credential-in-url', 'authorization-header', 'credential-assignment'],
             limits={'seconds_per_repository': 60.0, 'objects': 10000,

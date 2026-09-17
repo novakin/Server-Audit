@@ -283,23 +283,37 @@ def repository_view():
 
 def object_format(executable, directory, config_path, deadline):
     """Parse only storage-format keys. Includes and all source-repository policy are ignored."""
-    args = command(executable, directory, 'config', '--no-includes', '--file', str(config_path),
-                   '--get-regexp', r'^(core\.repositoryformatversion|extensions\.)')
+    args = command(executable, directory, 'config', '--no-includes', '--null', '--file', str(config_path),
+                   '--get-regexp', r'^(core\.repositoryformatversion$|extensions\.)')
     with GitProcess(args, environment(directory), directory, deadline) as reader:
         data = reader.all(4096)
         reader.finish(accepted=(0, 1))
+    if data and not data.endswith(b'\0'):
+        raise GitReadError('Git storage-format metadata is truncated.')
     values = {}
-    for line in data.splitlines():
-        key, separator, value = line.partition(b' ')
-        if not separator:
+    for record in data.split(b'\0')[:-1]:
+        key, separator, value = record.partition(b'\n')
+        if not key or (not separator and key != b'extensions.worktreeconfig'):
             raise GitReadError('Git storage-format metadata is invalid.')
-        values[key] = value
+        # NUL ends a record; only the first newline separates key and value.
+        # None (implicit true) is distinct from b'' (explicitly empty/false).
+        values[key] = value if separator else None
     if values.get(b'core.repositoryformatversion', b'0') not in (b'0', b'1'):
         raise GitReadError('Unsupported Git repository format version.')
     supported = {b'extensions.objectformat', b'extensions.partialclone',
                  b'extensions.worktreeconfig', b'extensions.refstorage'}
     if any(key.startswith(b'extensions.') and key not in supported for key in values):
         raise GitReadError('Unsupported Git storage extension; object coverage is unknown.')
+    if b'extensions.worktreeconfig' in values:
+        # Let Git validate all its boolean spellings, including numeric values,
+        # without loading includes or activating source-repository settings.
+        args = command(executable, directory, 'config', '--no-includes', '--null',
+                       '--type=bool', '--file', str(config_path), '--get', 'extensions.worktreeconfig')
+        with GitProcess(args, environment(directory), directory, deadline) as reader:
+            boolean = reader.all(16)
+            reader.finish()
+        if boolean not in (b'true\0', b'false\0'):
+            raise GitReadError('Git boolean storage metadata is invalid.')
     algorithm = values.get(b'extensions.objectformat', b'sha1')
     if algorithm not in (b'sha1', b'sha256'):
         raise GitReadError('Unsupported Git object hash format.')

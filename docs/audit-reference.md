@@ -52,11 +52,15 @@ sudo python3 audit.py --git-root /srv/app/.git --git-root /opt/another-repo --ex
 
 Select a normal repository root, its actual `.git` directory, or a bare repository. SHA-1 and SHA-256 storage are supported by the reader design and exercised with native Git tests. Git-file indirection, shared-worktree `commondir`, alternate object stores, symlink/special-file storage and cross-filesystem object directories are rejected with incomplete coverage rather than followed outside the selected storage. Select standalone repositories individually. Config includes are not followed; their presence produces an incomplete-scope issue.
 
+The primary `config` file must be readable before object inspection. If it is missing or unreadable, the repository remains incomplete/Unknown, no object scan is attempted and no hash format is invented. Previously collected findings and later selected repositories are retained. A readable ordinary SHA-1 configuration may omit optional format/version settings; this is different from a missing configuration file. The auditor does not infer formats from object names or repair repository metadata.
+
+Storage metadata is read through NUL-delimited Git output, preserving embedded newlines and the distinction between valueless and explicitly empty values. The supported `extensions.worktreeConfig` boolean is validated by Git itself in the isolated reader: valueless means true, explicitly empty means false. Invalid values and unsupported storage metadata remain incomplete with redacted diagnostics. Includes and repository execution policy remain disabled; the additional bounded boolean read shares the existing repository deadline.
+
 The two reported modes are `git_configuration` (config/config.worktree only) and `local_objects` (stored blobs, commits and annotated tags). Objects are inspected once, including unreachable objects still present, loose objects and packed/delta objects. **Current working files are not scanned**, even if untracked or ignored files contain credentials. Deleted historical content is inspected only while its objects remain locally available. Reflogs, index files, hooks and other administrative-file contents are not scanned. Tree objects are counted but not used to reconstruct filenames. Missing/pruned history, LFS payloads and submodule repositories need separate coverage; shallow/partial-clone markers are reported.
 
 ### Built-in candidate rules
 
-Ruleset version 1 has eight fixed IDs:
+Ruleset version 2 retains the eight fixed IDs and candidate regexes from version 1:
 
 | Rule ID | Candidate pattern, not validation |
 | --- | --- |
@@ -70,6 +74,17 @@ Ruleset version 1 has eight fixed IDs:
 | `credential-assignment` | Bounded literal password, token, API-key or secret-key assignments; selected exact placeholders and environment/template references are excluded. |
 
 Exact regexes and exclusions live in [git_secrets.py](../server_audit/collectors/git_secrets.py), not a downloaded ruleset. Repository allow comments and suppression files do not disable detection. These are intentionally focused heuristics: there can be false positives and missed secrets, including unsupported providers/formats and encoded/encrypted data. No equivalence to Gitleaks or exhaustive credential coverage is claimed. Detection must be reviewed locally before remediation.
+
+### Ruleset 2 reference exclusions
+
+Version 2 narrows assignment exclusions rather than adding a new scanner or candidate family. Exact placeholders remain excluded. Selected complete quoted references (`"${PRIVATE_PASSWORD}"`, `"{{ password }}"`) and complete unquoted Python/JavaScript environment expressions remain excluded when they fit the bounded syntax checks. Surrounding text is checked so a capture ending at `os.environ.get` is not mistaken for the complete expression.
+
+A prefix alone is not an exclusion. Matching literal values such as `"$uperSecret123!"`, bare-dollar strings, malformed templates, angle-bracket values and quoted code-looking strings remain candidates. Matching hardcoded fallbacks or concatenations, such as `"${PASSWORD:-HardcodedSecret123!}"` or `os.environ.get("PASSWORD", "HardcodedSecret123!")`, are not discarded as references. The existing candidate regexes and length limits still apply; this is not comprehensive fallback detection or a parser for every language. Ambiguous or overlong reference syntax is not silently suppressed. No expression is evaluated, expanded or decoded.
+
+
+The reference boundary check does not treat a newline or a comment as the end of an assignment. It inspects at most 257 suffix bytes, skipping whitespace and familiar `#`, `//` and closed `/* ... */` comments. Exclusion requires a delimiter (`,`, `;`, `}` or `]`) or the actual end of the inspected data within that window. An unterminated comment or a window ending before the data does not establish completion. Thus matching multiline fallbacks and concatenations remain candidates, including continuations after comments and different line endings.
+
+This deliberately does not infer language-specific automatic semicolon insertion. A reference followed by a separate statement without an explicit delimiter can therefore remain a review candidate. That false-positive trade-off is intentional: uncertain boundaries must not silently hide a possible hardcoded value. The candidate regexes themselves are unchanged; a format outside those regexes is not added by this boundary correction.
 
 ### Bounds, isolation and evidence
 
