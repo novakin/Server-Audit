@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) · [Development guide](development.md)
 
-This page preserves a historical native-lab run, including its original flat-layout commands and former Gitleaks integration. It is not a new validation of the current package. For current test commands and skips, use the [development guide](development.md#local-setup).
+This page preserves a historical native-lab run, including its original flat-layout commands and former Gitleaks integration. It is not a new validation of the current package. For current test commands, use the [development guide](development.md#local-setup). The automated workflow, triggers, prerequisites, skip policy and required-check setup are documented under [Continuous integration](development.md#continuous-integration).
 
 ## Environment and scope
 
@@ -46,7 +46,11 @@ The changes remain in `server_audit/collectors/docker_audit.py`, the owning coll
 
 ## Repeatable live-test fixture contract
 
-The opt-in tests do not provision a server. Prepare an isolated, disposable Linux environment first; do not run the fixture setup against a production host. Normal test discovery skips these checks. Explicit activation requires root and `/run/server-security-audit-integration-lab`; the marker is a misuse guard, not an isolation mechanism.
+The same fixture contract targets **Ubuntu and Debian**. The tests do not check a distribution name; they require the native tools and prepared fixtures listed below. The historical run above establishes Debian results only, not an equivalent Ubuntu live validation.
+
+Routine GitHub CI runs on Ubuntu 24.04 with `AUDIT_LIVE_INTEGRATION=0`. The four live-test skips mean that the lab has not been provisioned and enabled, **not that Ubuntu is unsupported**. The routine CI runner rejects live activation; no automated live-lab provisioning workflow is configured.
+
+The opt-in tests do not provision a server. Prepare an isolated, disposable Ubuntu or Debian environment first; do not run the fixture setup against a production host. Normal test discovery skips these checks. Explicit activation requires root and `/run/server-security-audit-integration-lab`; the marker is a misuse guard, not an isolation mechanism.
 
 For an already prepared authorised disposable lab, run from the current repository root:
 
