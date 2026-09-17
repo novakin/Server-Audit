@@ -58,6 +58,12 @@ class PackedStorageTests(unittest.TestCase):
         self.assertNotIn('PRIVATE_DIAGNOSTIC_SENTINEL', json.dumps([report, findings]))
         return report, findings
 
+    def replace_fixture_file(self, path, data):
+        # Git objects are read-only. Replace only this disposable fixture file;
+        # do not require root or change the auditor's read-only behavior.
+        path.unlink(missing_ok=True)
+        path.write_bytes(data)
+
     def assert_incomplete(self, report, findings):
         repository = report['repositories'][0]
         self.assertEqual(report['status'], 'partial')
@@ -87,14 +93,14 @@ class PackedStorageTests(unittest.TestCase):
         self.assertTrue(any('pairing' in issue for issue in report['repositories'][0]['issues']))
 
     def test_corrupt_index_is_incomplete_even_when_enumeration_does_not_fail(self):
-        self.index.write_bytes(b'PRIVATE_DIAGNOSTIC_SENTINEL')
+        self.replace_fixture_file(self.index, b'PRIVATE_DIAGNOSTIC_SENTINEL')
         report, findings = self.scan()
         self.assert_incomplete(report, findings)
         self.assert_pack_unchanged()
         self.assertTrue(any('diagnostics' in issue for issue in report['repositories'][0]['issues']))
 
     def test_truncated_index_is_incomplete(self):
-        self.index.write_bytes(self.index.read_bytes()[:16])
+        self.replace_fixture_file(self.index, self.index.read_bytes()[:16])
         report, findings = self.scan()
         self.assert_incomplete(report, findings)
         self.assert_pack_unchanged()
@@ -113,7 +119,7 @@ class PackedStorageTests(unittest.TestCase):
         self.assertTrue(any('pairing' in issue for issue in report['repositories'][0]['issues']))
 
     def test_corrupt_pack_content_remains_incomplete(self):
-        self.pack.write_bytes(b'PRIVATE_DIAGNOSTIC_SENTINEL')
+        self.replace_fixture_file(self.pack, b'PRIVATE_DIAGNOSTIC_SENTINEL')
         report, findings = self.scan()
         self.assert_incomplete(report, findings)
 
@@ -129,7 +135,7 @@ class PackedStorageTests(unittest.TestCase):
                 if failure == 'missing':
                     self.index.unlink()
                 else:
-                    self.index.write_bytes(b'PRIVATE_DIAGNOSTIC_SENTINEL')
+                    self.replace_fixture_file(self.index, b'PRIVATE_DIAGNOSTIC_SENTINEL')
                 report, findings = self.scan(str(self.root), str(healthy))
                 self.assert_incomplete(report, findings)
                 self.assertEqual([item['status'] for item in report['repositories']], ['partial', 'ok'])
@@ -142,7 +148,7 @@ class PackedStorageTests(unittest.TestCase):
                 self.assert_pack_unchanged()
 
     def test_partial_status_and_redaction_survive_json_and_html_export(self):
-        self.index.write_bytes(b'PRIVATE_DIAGNOSTIC_SENTINEL')
+        self.replace_fixture_file(self.index, b'PRIVATE_DIAGNOSTIC_SENTINEL')
         check, findings = self.scan()
         report = {
             'schema_version': 1, 'host': 'synthetic', 'timestamp_utc': '2026-09-17T12:00:00+00:00',

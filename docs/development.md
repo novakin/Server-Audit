@@ -1,6 +1,6 @@
 # Development and verification
 
-[Documentation index](../README.md) · Internal engineering documentation · Reviewed 2026-09-17
+[Documentation index](../README.md) · Internal engineering documentation · Reviewed 2026-09-18
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
@@ -21,7 +21,7 @@ Run the layout/copy checks and Git suite directly with:
 
 ```bash
 python3 -m unittest tests.test_layout -v
-python3 -m unittest tests.test_git_secrets tests.test_git_reader tests.test_git_pack tests.test_git_audit tests.test_git_regressions -v
+python3 -m unittest discover -s tests -t . -p 'test_git_*.py' -v
 ```
 
 Do not run a test by its file path as a standalone script, or use bare former module names such as `test_runner`. Standard discovery from the root also finds the ordinary `tests` package, but `-s tests -t .` is the documented command. Patch symbols where they are looked up (for example `server_audit.cli.audit` or `server_audit.collectors.git_reader.subprocess.Popen`). Subprocess fixtures use package imports with the repository root as their import directory, not path injection.
@@ -30,6 +30,7 @@ Do not run a test by its file path as a standalone script, or use bare former mo
 
 | Tests | Coverage |
 | --- | --- |
+| `tests/test_ci.py` | CI prerequisite and skip policy; no native tools required |
 | `tests/test_layout.py` | Runtime-only copy, lazy initializers, thin-launcher exit codes, caller-relative paths and no-network companion operations |
 | `tests/test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `tests/test_runner.py` and `tests/fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
@@ -58,14 +59,42 @@ Shared host fixture functions live in `tests/helpers.py`; it contains no test ca
 3. Follow the [collector contract](architecture.md#architecture-and-extending-audits). Preserve explicit prerequisites and keep rendering separate from collection.
 4. For layout/import changes, compare the discovered test identities and skip gates with the baseline; exercise packaged subprocess fixtures and the runtime-only copy tests. Run focused tests, then the full suite for changes affecting the runner, report contract or shared helpers. Record platform, failures and skips.
 5. For HTML changes, inspect the actual report at desktop/mobile sizes and in light/dark themes. Check overflow, readable statuses, escaping, navigation and print behavior when affected.
-6. Update the relevant guide in the same change. If report fields/statuses change, update contract tests and [format documentation](report-format.md).
+6. Assess documentation impact in every PR. Update affected guides, examples and links in the same change, or give a specific no-impact reason in the PR. If report fields/statuses change, update contract tests and [format documentation](report-format.md).
 7. Before distributing a snapshot, copy both root launchers and the complete `server_audit/` directory (including its template) into a clean destination, exclude reports/test artifacts, and retain the previous known-good snapshot for rollback. No deployment is implied by a local change.
 
-Do not add a new framework, documentation generator, CI pipeline or release process merely to document this small project. These can be introduced when an actual maintenance requirement exists. Source is maintained in [novakin/Server-Audit](https://github.com/novakin/Server-Audit); automated CI and release tagging are not configured. Before committing, review the staged file list and diff. Keep actual host reports, local lab files and scanner binaries out of the source repository; ignore rules cannot cover every custom output path.
+Do not add a new framework, documentation generator, CI pipeline or release process merely to document this small project. These can be introduced when an actual maintenance requirement exists. Source is maintained in [novakin/Server-Audit](https://github.com/novakin/Server-Audit). Routine CI is defined in [ci.yml](../.github/workflows/ci.yml); release tagging and deployment remain separate, unconfigured workflows. Before committing, review the staged file list and diff. Keep actual host reports, local lab files and scanner binaries out of the source repository; ignore rules cannot cover every custom output path.
 
 ## Documentation maintenance
 
-README is the entry point. Operations owns setup and handling; audit reference owns detection scope; architecture owns extension rules; report format owns status semantics; this guide owns test workflow. Link to the owning page instead of repeating detailed facts. Update the reviewed date when behavior is checked against source. Keep historical verification labeled by date and avoid presenting test totals as permanent guarantees.
+README is the entry point. Operations owns setup and handling; audit reference owns detection scope; architecture owns extension rules; report format owns status semantics; this guide owns test workflow. Link to the owning page instead of repeating detailed facts. Update the reviewed date when behavior is checked against source. Keep historical verification labeled by date and avoid presenting test totals as permanent guarantees. Do not append routine run histories for every PR: retain a compact result, tested revision, skip reasons and CI link in the PR body. CI logs expire under repository retention settings, so the PR summary must stand on its own. Long-term release evidence needs an explicit retention decision.
+
+## Continuous integration
+
+[CI](../.github/workflows/ci.yml) runs one `Linux tests` job on GitHub-hosted `ubuntu-24.04` with Python `3.13`. Pull requests (including stacked PRs), pushes to `main` and manual dispatch use the same routine suite. Documentation-only PRs also run this short job; documentation accuracy still requires reviewing examples, links and claims.
+
+The workflow compiles Python files, then invokes the standard-library [CI runner](../tests/ci.py) once:
+
+```bash
+python -m tests.ci
+```
+
+Run from the repository root. The runner requires Linux, Git and `ssh-keygen`; it installs nothing. The official setup-python action may provision Python on the disposable runner. Preflight refuses an enabled `AUDIT_LIVE_INTEGRATION`. Missing prerequisites, zero tests, test failures and unexpected skips fail the job. Only the four exact prepared-lab test identities listed in `tests/ci.py` may be skipped; additions or changes require review. There is no fixed total-test-count gate. Use ordinary unittest locally where those CI prerequisites are unavailable, and disclose its skips rather than weakening the CI policy.
+
+Tests use disposable repositories, synthetic credentials, mocked public endpoints and loopback sockets. This job does not provision the SSH/Docker/firewall lab, audit production or deploy anything. The existing lab remains an explicit, separate workflow described in [live validation](live-validation.md).
+
+The two official actions are pinned to full commit SHAs, with release labels in comments. Review upstream changes before updating those pins. Token permissions are `contents: read`, checkout does not persist credentials, and no production secrets are passed to tests. There are no caches, third-party testing packages, artifact uploads or privileged PR triggers. A ten-minute job timeout bounds hung runs; a newer run cancels obsolete work for the same PR/ref.
+
+Logs record OS/Python/Git versions and revision IDs; the job summary reports results and skip reasons. On a PR, the tested revision is the default checkout merge revision, not just the contributor's head SHA. Targeted tests are for local iteration; do not duplicate the focused Git suite and full suite within the same CI job. Push revised code and use its new CI result before approval.
+
+### Make the check required
+
+After `Linux tests` has succeeded on GitHub, a repository administrator should require that exact check for `main`, preferably bound to the GitHub Actions app. Retain existing access and review rules. The workflow does not configure branch protection, and a running job is not proof of enforcement. Verify the setting in repository rules/branch protection; availability depends on repository plan and permissions. Do not claim enforcement until it is read back successfully.
+
+For stacked work, merge the CI PR first. Retarget the test-cleanup PR to `main` once its dependency is merged and confirm a successful check on the resulting revision. Do not merge the cleanup into the CI branch.
+
+### Documentation and completion
+
+Use the [PR template](../.github/pull_request_template.md) for scope, revision-specific verification, documentation impact and remaining risk. API-created PRs must include those sections explicitly. Update the owning guide in the behavior-changing PR and review summaries elsewhere for contradictions; a justified no-impact statement is better than a cosmetic edit. Use the final self-review in [AGENTS.md](../AGENTS.md#pr-completion) before requesting approval.
 
 ## Final revised-corrections verification — 2026-09-17
 
