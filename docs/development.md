@@ -21,7 +21,7 @@ Run the layout/copy checks and Git suite directly with:
 
 ```bash
 python3 -m unittest tests.test_layout -v
-python3 -m unittest tests.test_git_secrets tests.test_git_reader tests.test_git_pack tests.test_git_audit -v
+python3 -m unittest tests.test_git_secrets tests.test_git_reader tests.test_git_pack tests.test_git_audit tests.test_git_regressions -v
 ```
 
 Do not run a test by its file path as a standalone script, or use bare former module names such as `test_runner`. Standard discovery from the root also finds the ordinary `tests` package, but `-s tests -t .` is the documented command. Patch symbols where they are looked up (for example `server_audit.cli.audit` or `server_audit.collectors.git_reader.subprocess.Popen`). Subprocess fixtures use package imports with the repository root as their import directory, not path injection.
@@ -34,6 +34,8 @@ Do not run a test by its file path as a standalone script, or use bare former mo
 | `tests/test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `tests/test_runner.py` and `tests/fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
 | `tests/test_reliability.py` | Existing OS failure isolation and evidence preservation |
+| `tests/test_git_reference_boundaries.py` | Multiline/comment boundaries, conservative exclusions, unchanged locations/redaction and loose/packed SHA-1/SHA-256 regression cases |
+| `tests/test_git_regressions.py` | Missing primary config, literal/reference boundaries, Git boolean/NUL parsing, ruleset 2 and redacted exports |
 | `tests/test_git_pack.py` | Native packed-storage failures, evidence preservation and redaction |
 | `tests/test_git_reader.py` | Bounded pipes, safe metadata, shutdown/cancellation and native SIGINT |
 | `tests/test_git_audit.py` | CLI budgets, failure propagation, no export on abort, redaction and legacy reports |
@@ -64,6 +66,74 @@ Do not add a new framework, documentation generator, CI pipeline or release proc
 ## Documentation maintenance
 
 README is the entry point. Operations owns setup and handling; audit reference owns detection scope; architecture owns extension rules; report format owns status semantics; this guide owns test workflow. Link to the owning page instead of repeating detailed facts. Update the reviewed date when behavior is checked against source. Keep historical verification labeled by date and avoid presenting test totals as permanent guarantees.
+
+## Final revised-corrections verification — 2026-09-17
+
+The full-checkout verification below supersedes the temporary full-suite gap recorded in the multiline follow-up. It applies to the exact revised correction package, based on `698f85eca384ce2bad41e3b3876b85b37d3e67f5`, without further runtime or test changes. Publication updates only this verification record beyond that package.
+
+Environment: Debian 13, Python 3.13.5 and already installed Git 2.47.3. All ten delivered files matched their manifest and the final tested checkout. Thirty-five unchanged runtime/test/fixture files were matched to baseline Git blob hashes; reversing the patch recovered eight further exact baseline files. The complete runtime and test tree was present, not replacement stubs.
+
+| Run | Result |
+| --- | --- |
+| Exact unmodified baseline full suite | 173 discovered; 168 passed, 5 skipped; no failures |
+| Exact revised delivery full suite | 205 discovered; 200 passed, 5 skipped; no failures |
+| Focused Git suites including both new regression modules | 108 passed; no skips |
+| Independent delivery recheck plus boundary tests | 24 passed; no skips |
+| Compilation and patch reverse/forward application | Passed; resulting file hashes verified |
+
+The 24-test run combines eight independent delivery rechecks and the 16 boundary tests; the boundary tests are also included in the focused/full suites, so these totals are not additive. All 173 original test methods, assertion-call counts and decorators remain; 32 new methods give 205 discovered cases. The five existing skips remain one unavailable OpenSSH key-generation test and four separately gated prepared-lab checks. No skip condition was broadened. The historical JSON fixture and HTML template are byte-identical to baseline.
+
+The commands shown in the multiline follow-up were rerun successfully in the complete verified checkout. No production-host audit, external-target probe, tool installation, new native-lab/Windows/browser validation or deployment was performed. This record establishes regression results for the agreed corrective scope, not exhaustive secret detection or a production security certification.
+
+## Multiline reference-boundary follow-up — 2026-09-17
+
+This local follow-up corrects an incomplete reference exclusion in the preceding, unpublished correction package. Both quoted and unquoted matches now require a bounded delimiter or actual end of data; newlines and comments alone are not completion. Runtime change is confined to `server_audit/collectors/git_secrets.py`. The earlier Git-configuration fixes, ruleset version 2, candidate regexes, scan limits, host schema, README and renderer/template are unchanged.
+
+Fresh checks used Debian 13, Python 3.13.5 and existing Git 2.47.3:
+
+| Check | Result |
+| --- | --- |
+| Eight independent delivery-recheck tests against the preceding package | Five passed; three failed, reproducing the multiline omission |
+| Same eight tests after the boundary correction | Eight passed, no skips |
+| New `tests/test_git_reference_boundaries.py` | Sixteen passed, no skips |
+| Combined fresh run | Twenty-four passed, no skips |
+
+The new tests cover fallbacks/concatenations across LF, CRLF, CR and UTF-8 JavaScript line separators, quoted references/placeholders, comments, truncated suffixes, explicit delimiters, genuine EOF and intentionally conservative ambiguous boundaries. Real disposable SHA-1/SHA-256 repositories are exercised both loose and packed; source bytes and redaction are checked. The earlier three Git defects are also rechecked through the independent delivery tests.
+
+At the time of this targeted follow-up, the complete repository suite had not yet been rerun. That gap was subsequently closed by the final revised-corrections verification above. The earlier totals below still describe their original runs. Current commands for the revised implementation are:
+
+```bash
+python3 -m unittest tests.test_git_secrets tests.test_git_reader tests.test_git_pack tests.test_git_audit tests.test_git_regressions tests.test_git_reference_boundaries -v
+python3 -m unittest discover -s tests -t . -p 'test_*.py' -v
+```
+
+No production host audit, remote-target probe, expression evaluation, tool installation, GitHub publication or deployment was performed in this follow-up.
+
+## Git scanner corrections — 2026-09-17
+
+Baseline: merged main `698f85eca384ce2bad41e3b3876b85b37d3e67f5`, after the README-only PR. Verified in Debian 13 with Python 3.13.5 and the existing Git 2.47.3. Baseline runtime/test files and edited guides were matched to Git blob identities. Runtime changes are confined to `server_audit/collectors/git_secrets.py` and `server_audit/collectors/git_reader.py`: missing primary configuration prevents an unverified object scan, assignment exclusions match bounded complete references, and NUL-delimited metadata plus Git's typed boolean conversion accepts valid boolean syntax. Ruleset version becomes 2; host schema, candidate regexes, limits and scope stay unchanged.
+
+| Run | Result |
+| --- | --- |
+| Unmodified baseline suite | 173 discovered; 168 passed, 5 skipped; no failures. |
+| Three original review regressions before corrections | All three failed as expected. |
+| Same three review regressions after corrections | 3 passed; no skips. |
+| Added regression module | 16 passed; no skips. |
+| Focused Git detector, reader, packed-storage, pipeline and new regressions | 92 passed; no skips. |
+| Complete corrected suite | 189 discovered; 184 passed, 5 skipped; no failures. |
+
+Reproduce the focused and complete runs from the repository root:
+
+```bash
+python3 -m unittest tests.test_git_secrets tests.test_git_reader tests.test_git_pack tests.test_git_audit tests.test_git_regressions -v
+python3 -m unittest discover -s tests -t . -p 'test_*.py' -v
+```
+
+Full-discovery runs used the same unittest loader/runner through a local validation driver with normal Python SIGINT handling. Foreground tool time limits interrupted earlier attempts. An initial detached-shell run inherited ignored SIGINT and failed the two cancellation subcases; restoring normal signal handling in the driver resolved that harness problem without changing tests or runtime shutdown behavior. The passing baseline and corrected runs both include the real SIGINT tests. No validation-driver files are part of the runtime or this repository change.
+
+All original 173 test identities, assertion-call counts and skip gates are retained. The runner contract explicitly expects ruleset 2 without rewriting the historical JSON fixture. One existing fatal-shutdown test fixture now supplies primary config and a mocked format result so it reaches its original shutdown failure path; its assertions remain intact. Existing ruleset-1 and legacy Git reports still render. New tests cover normal/bare SHA-1/SHA-256 storage, preservation of earlier findings and later repositories, synthetic permission denial, literal defaults/concatenation, malformed/truncated reference syntax, native boolean spellings, embedded-newline framing, source immutability and JSON/HTML/text redaction with partial coverage.
+
+The five unchanged skips are one OpenSSH key-generation test (`ssh-keygen` absent) and four explicitly prepared native-lab tests. Native Git and IPv4/IPv6 loopback tests ran; public endpoints stayed mocked. No tool installation, production host audit, external target probe, new native-lab/systemd/Windows or browser validation was performed. The README, HTML template, historical report fixture, CLI options and report/export schemas are unchanged. No new dependency, CI, deployment or release mechanism is introduced. These results are evidence for this revision, not a security certification or exhaustive secret-coverage claim.
 
 ## Package layout verification — 2026-09-17
 

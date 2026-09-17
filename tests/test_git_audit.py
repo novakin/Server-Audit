@@ -85,10 +85,12 @@ class GitAuditTests(unittest.TestCase):
             root = Path(folder) / 'repo'
             (root / '.git' / 'objects').mkdir(parents=True)
             (root / '.git' / 'HEAD').write_text('ref: refs/heads/main\n')
+            (root / '.git' / 'config').write_text('[core]\nrepositoryformatversion = 0\n')
             workspace = Path(folder) / 'reader'
             workspace.mkdir(mode=0o700)
             with patch('server_audit.collectors.git_secrets.shutil.which', return_value='fixture-git'), \
                     patch('server_audit.collectors.git_reader.tempfile.mkdtemp', return_value=str(workspace)), \
+                    patch('server_audit.collectors.git_secrets.object_format', return_value=('sha1', False)), \
                     patch('server_audit.collectors.git_secrets.scan_objects', side_effect=git_reader.GitShutdownInterrupted('Fixture reader PID 123.')) as scan:
                 with self.assertRaisesRegex(KeyboardInterrupt, 'workspace retained'):
                     git_secrets.collect([str(root), str(root / 'other')])
