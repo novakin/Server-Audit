@@ -60,7 +60,7 @@ class ScannerScratchTests(unittest.TestCase):
         (self.root / '.git').mkdir(parents=True)
 
     def test_creation_failure_is_unknown_and_never_launches_scanner(self):
-        with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.TemporaryDirectory', side_effect=OSError('PRIVATE_SENTINEL')), patch('git_secrets.scan_mode') as scan:
+        with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.mkdtemp', side_effect=OSError('PRIVATE_SENTINEL')), patch('git_secrets.scan_mode') as scan:
             report, findings = git_secrets.collect([str(self.root)])
         scan.assert_not_called()
         self.assertEqual(report['status'], 'partial')
@@ -79,7 +79,7 @@ class ScannerScratchTests(unittest.TestCase):
                     if path.name == filename:
                         raise OSError('PRIVATE_SENTINEL')
                     return native_write(path, *args, **kwargs)
-                with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.TemporaryDirectory', return_value=scratch), patch.object(Path, 'write_text', autospec=True, side_effect=write), patch('git_secrets.scan_mode') as scan:
+                with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.mkdtemp', return_value=scratch.name), patch.object(Path, 'write_text', autospec=True, side_effect=write), patch('git_secrets.scan_mode') as scan:
                     report, findings = git_secrets.collect([str(self.root)])
                 scan.assert_not_called()
                 self.assertFalse(Path(scratch.name).exists())
@@ -90,7 +90,7 @@ class ScannerScratchTests(unittest.TestCase):
     def test_cleanup_failure_retains_scan_evidence_and_private_path(self):
         scratch = tempfile.TemporaryDirectory(dir=self.directory.name)
         self.addCleanup(scratch.cleanup)
-        with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.TemporaryDirectory', return_value=scratch), patch.object(scratch, 'cleanup', side_effect=OSError('PRIVATE_SENTINEL')), patch('git_secrets.scan_mode', side_effect=clean_scan):
+        with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.mkdtemp', return_value=scratch.name), patch('git_secrets.shutil.rmtree', side_effect=OSError('PRIVATE_SENTINEL')), patch('git_secrets.scan_mode', side_effect=clean_scan):
             report, findings = git_secrets.collect([str(self.root)])
         repository = report['repositories'][0]
         self.assertEqual(report['status'], 'partial')
@@ -109,7 +109,7 @@ class ScannerScratchTests(unittest.TestCase):
         (second / '.git').mkdir(parents=True)
         scratch = tempfile.TemporaryDirectory(dir=self.directory.name)
         self.addCleanup(scratch.cleanup)
-        with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.TemporaryDirectory', side_effect=[OSError('denied'), scratch]), patch('git_secrets.scan_mode', side_effect=clean_scan):
+        with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.mkdtemp', side_effect=[OSError('denied'), scratch.name]), patch('git_secrets.scan_mode', side_effect=clean_scan):
             report, findings = git_secrets.collect([str(self.root), str(second)])
         self.assertEqual([item['status'] for item in report['repositories']], ['error', 'ok'])
         self.assertEqual(len(report['repositories'][1]['scans']), 2)
@@ -121,7 +121,7 @@ class ScannerScratchTests(unittest.TestCase):
             with self.subTest(error=type(error).__name__):
                 scratch = tempfile.TemporaryDirectory(dir=self.directory.name)
                 self.addCleanup(scratch.cleanup)
-                with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.TemporaryDirectory', return_value=scratch), patch.object(scratch, 'cleanup', side_effect=OSError('cleanup failed')) as cleanup, patch('git_secrets.scan_mode', side_effect=error):
+                with patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.mkdtemp', return_value=scratch.name), patch('git_secrets.shutil.rmtree', side_effect=OSError('cleanup failed')) as cleanup, patch('git_secrets.scan_mode', side_effect=error):
                     with self.assertRaises(type(error)):
                         git_secrets.collect([str(self.root)])
                 cleanup.assert_called_once()
@@ -137,7 +137,7 @@ class ScannerScratchTests(unittest.TestCase):
         self.assertNotIn('PRIVATE_SENTINEL', json.dumps([report, findings]))
 
     def test_runner_retains_other_evidence_after_scanner_setup_failure(self):
-        with patch('audit_runner.collect_git_secrets', side_effect=lambda roots: git_secrets.collect([str(self.root)])), patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.TemporaryDirectory', side_effect=OSError('fixture failure')):
+        with patch('audit_runner.collect_git_secrets', side_effect=lambda roots: git_secrets.collect([str(self.root)])), patch('git_secrets.shutil.which', return_value='fixture-scanner'), patch('git_secrets.tempfile.mkdtemp', side_effect=OSError('fixture failure')):
             report, _ = fixture_report()
         self.assertEqual(report['checks']['git_secrets']['status'], 'partial')
         self.assertEqual(report['checks']['ssh']['status'], 'ok')
@@ -149,7 +149,7 @@ class ScannerProcessTests(unittest.TestCase):
     def test_timeout_and_interrupt_use_the_same_cleanup(self):
         for error in (subprocess.TimeoutExpired('fixture', 120), KeyboardInterrupt()):
             with self.subTest(error=type(error).__name__), patch('git_secrets.subprocess.Popen') as factory, patch('git_secrets._stop_scanner') as stop:
-                process = factory.return_value.__enter__.return_value
+                process = factory.return_value
                 process.wait.side_effect = error
                 if isinstance(error, KeyboardInterrupt):
                     with self.assertRaises(KeyboardInterrupt):
@@ -168,7 +168,7 @@ class ScannerProcessTests(unittest.TestCase):
 
     def test_success_preserves_suppressed_output_and_sanitized_environment(self):
         with patch.dict(os.environ, {'GIT_CONFIG_COUNT': '1', 'GITLEAKS_CONFIG': 'PRIVATE_SENTINEL'}), patch('git_secrets.subprocess.Popen') as factory:
-            process = factory.return_value.__enter__.return_value
+            process = factory.return_value
             process.returncode = 0
             self.assertEqual(git_secrets.execute(['fixture']), 0)
         kwargs = factory.call_args.kwargs

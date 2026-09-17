@@ -68,7 +68,11 @@ Prefer export bundles for stored audits. If redirecting stdout, set a restrictiv
 
 Git scratch creation or control-file writes that fail leave the requested repository `error` (no scan completed) or `partial` (some scan evidence retained); the overall Git check is `partial` with an Unknown finding. Raw scratch error strings are withheld. Later selected repositories and other collectors can still run. A cleanup failure on an otherwise completed run preserves evidence and records `cleanup_status: error` and `scratch_path` for restricted local follow-up; it must not be interpreted as clean completion.
 
-Ctrl+C while waiting for the scanner force-stops its private POSIX process group and waits for the scanner before scratch cleanup. This reuses the timeout cleanup, without a new process framework. Interruption propagates; the host CLI does not export a completed audit or claim a successful scan. This is not checkpoint/resume support or a guarantee against uncatchable termination (for example SIGKILL or power loss). On interruption, cleanup errors do not mask the interruption; inspect private temporary storage locally when necessary.
+Ctrl+C while waiting for the scanner attempts to stop its private POSIX process group and reap the scanner before scratch cleanup, using the same helper as timeout handling. Interruption remains a `KeyboardInterrupt`, even if signalling or reaping fails; the host CLI does not continue collection or export a completed audit. An ordinary timeout remains a failed scan only after shutdown succeeds.
+
+If shutdown cannot be confirmed, the audit aborts and leaves its private `0700` scratch directory in place. The diagnostic identifies the scanner PID and retained path without including raw scanner logs or OS error text. This also applies to a second Ctrl+C during shutdown. Verify and stop the scanner and its remaining process-group members before removing the retained directory; a PID alone must not be treated as proof of process identity. Do not interpret retained files as a completed scan or audit. Normal successful shutdown still removes scratch; no automatic finalizer deletes scratch after an unconfirmed shutdown.
+
+This is not checkpoint/resume support or a guarantee against uncatchable termination (for example SIGKILL or power loss). Scratch cleanup errors after a successful stop do not mask interruption; inspect private temporary storage locally when necessary.
 
 ## Review workflow
 

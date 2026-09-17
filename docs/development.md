@@ -4,6 +4,28 @@
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
+## Scanner shutdown failure follow-up — 2026-09-17
+
+Verified against branch baseline `796a1547f6fe723f7e7ecd6d2937523d4588b05f` in a Debian 13 Linux container with Python 3.13.5. All original runtime modules, the HTML template, test modules and the historical runner fixture were matched to their GitHub blob hashes before testing. Only `git_secrets.py` changes runtime behavior; the existing reliability mocks were adapted to explicit process/scratch ownership without removing assertions or broadening skip gates.
+
+| Run | Result |
+| --- | --- |
+| Unmodified branch suite | 108 discovered; 102 passed, 6 skipped; no failures. |
+| Two new cancellation regressions against unfixed code | Both failed as expected: `KeyboardInterrupt` was not raised after an injected shutdown or reap error. |
+| New shutdown regressions | 11 passed; no skips. |
+| Focused reliability, shutdown, Git, SSH and reporting suite | 49 discovered; 48 passed, 1 skipped (opt-in real Gitleaks). |
+| Complete changed suite | 119 discovered; 113 passed, 6 skipped; no failures. |
+
+```bash
+python3 -m unittest test_scanner_shutdown -v
+python3 -m unittest test_reliability test_scanner_shutdown test_git_secrets test_ssh_evidence test_reporting -v
+python3 -m unittest discover -s . -p 'test_*.py' -v
+```
+
+The new tests cover cancellation after shutdown/reaping errors, fatal timeout shutdown failure, a second interruption during shutdown, ordinary launch/wait errors, retained scratch and stopped repository iteration, stop/reap/cleanup ordering, and suppression of final summary/export after failed shutdown. One test sends real SIGINT to a synthetic scanner wrapper while deliberately injecting a denied group signal. Its test harness subsequently stops and reaps the child; this proves cancellation propagation, not that production can override a denied signal. The existing normal real-SIGINT regression also passed.
+
+The six full-suite skips remain one native OpenSSH key-generation test (`ssh-keygen` absent), one opt-in real Gitleaks test, and four prepared-lab integration tests. Native IPv4/IPv6 loopback checks passed; public targets were mocked. No tools were installed, production host audits run, external targets probed, or CI/deployment changes made. Real Gitleaks/OpenSSH integration, visual browser review and fully booted systemd-host validation were not performed for this follow-up. Report schema, SSH fields, renderer/template and historical fixture remain unchanged. See [operator handling](operations.md#scanner-failures-and-interruption) for retained scratch.
+
 ## Reliability and SSH fixes — 2026-09-17
 
 Local verification for the four review fixes used a Debian 13 Linux container with Python 3.13.5. This was not a fully booted systemd test host or a production audit. The original runtime files, template, test files and runner fixture were verified against GitHub blob identities at baseline `2f1a9d64d23dbb3c759d76c23a2e476cc8936c64` before applying changes.
@@ -49,6 +71,7 @@ The integration test is skipped when `AUDIT_TEST_GITLEAKS_PATH` is unset or the 
 | `test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `test_runner.py` and `fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
 | `test_reliability.py` | OS/scratch failures, evidence preservation and synthetic scanner timeout/interruption cleanup |
+| `test_scanner_shutdown.py` | Cancellation under shutdown failure, explicit scratch ownership and no completed export after abort |
 | `test_ssh_evidence.py` | Attempted SSH scope, repeated values, additive compatibility and export/rendering |
 | `test_accounts.py` | Accounts, permissions, keys and observed usage |
 | `test_docker_audit.py` | Container projection, findings, absent CLI and daemon failures |
