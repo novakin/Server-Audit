@@ -9,25 +9,63 @@ import tempfile
 from pathlib import Path
 
 
+class ScannerShutdownError(RuntimeError):
+    """Scanner termination is unconfirmed; abort and retain private scratch."""
+
+
+class ScannerShutdownInterrupted(KeyboardInterrupt):
+    """Cancellation with unconfirmed scanner termination; retain scratch."""
+
+
+def _stop_scanner(process):
+    """Stop the private process group and reap the scanner before scratch cleanup."""
+    try:
+        try:
+            if os.name == 'posix':
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except ProcessLookupError:
+            pass  # The scanner/group may have exited before the signal.
+        process.wait()
+    except OSError:
+        raise ScannerShutdownError(
+            f"Cannot confirm shutdown of scanner PID {process.pid}; audit aborted."
+        ) from None
+    except KeyboardInterrupt:
+        raise ScannerShutdownInterrupted(
+            f"Shutdown of scanner PID {process.pid} was interrupted; termination is unconfirmed."
+        ) from None
+
+
 def execute(command):
     """Discard scanner logs: they must never enter the audit report."""
     environment = {key: value for key, value in os.environ.items() if not key.startswith(('GITLEAKS_', 'GIT_'))}
     environment.update(GIT_TERMINAL_PROMPT="0", GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
     try:
-        with subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                              env=environment, start_new_session=os.name == 'posix') as process:
-            try:
-                process.wait(timeout=120)
-            except subprocess.TimeoutExpired:
-                if os.name == 'posix':
-                    os.killpg(process.pid, signal.SIGKILL)
-                else:
-                    process.kill()
-                process.wait()
-                return None
-            return process.returncode
+        process = subprocess.Popen(
+            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=environment, start_new_session=os.name == 'posix',
+        )
     except OSError:
         return None
+
+    # Manage the wait explicitly: Popen.__exit__ can wait indefinitely after a
+    # failed stop, or replace the original interruption with a reaping error.
+    try:
+        process.wait(timeout=120)
+    except KeyboardInterrupt:
+        try:
+            _stop_scanner(process)
+        except (OSError, ScannerShutdownError):
+            raise ScannerShutdownInterrupted(
+                f"Cannot confirm shutdown of scanner PID {process.pid}; audit interrupted."
+            ) from None
+        raise
+    except (subprocess.TimeoutExpired, OSError):
+        _stop_scanner(process)
+        return None
+    return process.returncode
 
 
 def scan_mode(executable, root, mode, scratch):
@@ -101,8 +139,12 @@ def collect(roots=None):
             result['status'] = 'partial'
             findings.append({'level': 'UNKNOWN', 'message': f'Git secret scan: {root} is not a repository root.'})
             continue
-        with tempfile.TemporaryDirectory(prefix='server-audit-gitleaks-') as temporary:
-            scratch = Path(temporary)
+        scratch = None
+        cleanup_safe = True
+        try:
+            # Explicit ownership lets a failed shutdown retain scratch without
+            # a TemporaryDirectory finalizer deleting it during exception unwinding.
+            scratch = Path(tempfile.mkdtemp(prefix='server-audit-gitleaks-'))
             (scratch / 'config.toml').write_text('[extend]\nuseDefault = true\n', encoding='utf-8')
             (scratch / '.gitleaksignore').write_text('', encoding='utf-8')
             for mode in (('git',) if bare else ('git', 'dir')):
@@ -113,5 +155,26 @@ def collect(roots=None):
                     findings.append({'level': 'UNKNOWN', 'message': f"Git {root}: {scan['mode']} secret scan incomplete. See scanner status."})
                 for detection in scan['detections']:
                     findings.append({'level': 'REVIEW', 'message': f"Git {root}: possible secret ({detection['rule']}) in {detection['file']}:{detection['start_line']} [{scan['mode']}]. If real, revoke/rotate it and investigate exposure; deleting the file alone does not revoke a credential."})
-        repository['status'] = 'ok' if all(scan['status'] == 'ok' for scan in repository['scans']) else 'partial'
+        except (ScannerShutdownError, ScannerShutdownInterrupted) as error:
+            cleanup_safe = False
+            detail = f"{error} Private scratch retained at {scratch}; stop the scanner before removing it."
+            if isinstance(error, KeyboardInterrupt):
+                raise ScannerShutdownInterrupted(detail) from None
+            raise ScannerShutdownError(detail) from None
+        except OSError:
+            repository.update(status='partial' if repository['scans'] else 'error',
+                              detail='Private scanner scratch setup or access failed; scan incomplete. Raw error withheld.')
+            findings.append({'level': 'UNKNOWN', 'message': f'Git {root}: scanner scratch setup or access failed; see repository evidence.'})
+        finally:
+            if scratch is not None and cleanup_safe:
+                try:
+                    shutil.rmtree(scratch)
+                except OSError:
+                    # Do not mask an active interruption or a programming error.
+                    repository.update(status='partial' if repository['scans'] else 'error',
+                                      cleanup_status='error', scratch_path=str(scratch))
+                    findings.append({'level': 'UNKNOWN', 'message': f'Git {root}: private scanner scratch cleanup failed at {scratch}; restricted files may remain. Review locally.'})
+        repository.setdefault('status', 'ok' if all(scan['status'] == 'ok' for scan in repository['scans']) else 'partial')
+        if repository['status'] != 'ok':
+            result['status'] = 'partial'
     return result, findings

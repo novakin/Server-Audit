@@ -20,6 +20,8 @@ Keep the explicit runner, focused collectors, standard-library runtime and separ
 
 In [audit_runner.py](../audit_runner.py), the general SSH limitation says “installed default configuration” even when the caller selects `--ssh-config`. The CLI/guide correctly describe the selected configuration. A focused future change should make this report wording conditional or configuration-neutral and verify both default/custom cases. Runtime code was not changed for this documentation/proposal task.
 
+Follow-up: the reliability/SSH evidence change on 2026-09-17 resolves the wording above and records attempted configuration/context in the SSH check. The original review remains historical; see the [current contract](report-format.md#ssh-scope-and-repeated-settings) and [verification record](development.md#reliability-and-ssh-fixes--2026-09-17).
+
 ## Verification and adoption
 
 The proposal's module references, commands and invariants were checked against source; local Markdown links were validated. No tests or host audits were rerun because only documentation changed. Existing runtime verification remains dated in the [development guide](development.md).

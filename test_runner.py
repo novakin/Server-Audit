@@ -67,6 +67,15 @@ class RunnerTests(unittest.TestCase):
             'status': 'skipped',
             'detail': 'Docker audit skipped: Docker CLI not found in the audit PATH. No container inspection attempted; daemon presence is unverified.',
         }
+        # Intentional additive SSH evidence; the historical fixture remains unchanged.
+        expected['report']['checks']['ssh'].update(
+            configuration_source='custom', configuration_path='/etc/ssh/custom.conf',
+            connection_context='user=alice,addr=192.0.2.1',
+            selected_setting_values={'permitrootlogin': ['yes'], 'passwordauthentication': ['yes'],
+                                     'kbdinteractiveauthentication': ['yes']})
+        expected['report']['limitations'][1] = (
+            'SSH settings describe the selected on-disk configuration (sshd default unless --ssh-config is supplied), '
+            'not necessarily the running daemon or its command-line overrides. Match rules require --ssh-context.')
         self.assertEqual(report, expected['report'])
         self.assertEqual(list(report['checks']), list(expected['report']['checks']))
         self.assertEqual(calls, expected['commands'])

@@ -35,7 +35,7 @@ def audit(connection=None, ssh_config=None, env_roots=None, git_roots=None):
         "host": platform.node(), "findings": [], "checks": {},
         "limitations": [
             "No external scan: bindings and firewall rules do not prove internet reachability. Check provider firewalls, NAT, IPv4 and IPv6 from an independent host.",
-            "SSH settings describe the installed default configuration, not necessarily the running daemon or a custom service configuration. Match rules require --ssh-context.",
+            "SSH settings describe the selected on-disk configuration (sshd default unless --ssh-config is supplied), not necessarily the running daemon or its command-line overrides. Match rules require --ssh-context.",
             "Port inventory covers the current network namespace. Docker published ports are listed separately; other container runtimes and namespaces are not covered.",
             "Package results use existing APT metadata; this script does not refresh it or classify every update as a security update.",
             "This is a configuration inventory and focused audit, not vulnerability scanning or proof that the server is secure.",

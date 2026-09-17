@@ -32,8 +32,18 @@ def collect(run, connection=None, config=None):
     if connection:
         command += ["-C", connection]
     check = run(command)
+    # Retain attempted scope even when sshd is missing or rejects the request.
+    check.update(configuration_source="custom" if config else "default",
+                 configuration_path=config or None, connection_context=connection or None)
     findings = []
     if check["status"] == "ok":
         settings, findings = ssh_findings(check["output"])
         check["selected_settings"] = settings
+        # Keep legacy scalar values; this additive map preserves every occurrence.
+        values = {}
+        for line in check["output"].splitlines():
+            parts = line.split(None, 1)
+            if len(parts) == 2 and parts[0] in settings:
+                values.setdefault(parts[0], []).append(parts[1])
+        check["selected_setting_values"] = values
     return check, findings

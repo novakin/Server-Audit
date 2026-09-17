@@ -23,6 +23,7 @@ Coding agents must follow the active [project instructions](AGENTS.md).
 
 | Guide | Use it for |
 | --- | --- |
+| [Roadmap](docs/roadmap.md) | Approved fix scope, proposed next work and architecture decision triggers |
 | [Operator runbook](docs/operations.md) | Prerequisites, CLI, running audits, exports, retention and troubleshooting |
 | [Audit coverage and limits](docs/audit-reference.md) | SSH, accounts/keys, network/firewalls, Docker, environment files, Git secrets and scheduled tasks |
 | [Architecture and extension guide](docs/architecture.md) | Module ownership, data flow, collector contract and adding audits |
@@ -39,6 +40,6 @@ See [status definitions](docs/report-format.md#check-statuses) and [audit scope]
 
 ## Project state
 
-Source repository: [novakin/Server-Audit](https://github.com/novakin/Server-Audit). The source is public; generated audit reports remain restricted internal evidence and are excluded from version control. No CI pipeline or release process is configured. Ubuntu WSL validation is recorded in the [development guide](docs/development.md#recorded-verification--2026-09-17). Debian 13 and real SSH/Docker/firewall integrations passed in an [isolated lab](docs/live-validation.md). Standalone systemd-host behavior and external exposure remain unverified. No maintainer contact, retention duration or support SLA is assigned here; use the existing internal ownership and incident process.
+Source repository: [novakin/Server-Audit](https://github.com/novakin/Server-Audit). Generated audit reports remain restricted internal evidence and must not be committed, regardless of source repository visibility. No CI pipeline or release process is configured. Current reliability/SSH fix tests and disclosed skips are recorded in the [verification summary](docs/development.md#reliability-and-ssh-fixes--2026-09-17). Ubuntu WSL validation is recorded in the [development guide](docs/development.md#recorded-verification--2026-09-17). Debian 13 and real SSH/Docker/firewall integrations passed in an [isolated lab](docs/live-validation.md). Standalone systemd-host behavior and external exposure remain unverified. No maintainer contact, retention duration or support SLA is assigned here; use the existing internal ownership and incident process.
 
 Documentation reviewed against the current source on 2026-09-17. Keep source, tests and these guides aligned when behavior changes.

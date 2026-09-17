@@ -245,6 +245,11 @@ def render_text(report):
         emit(f"[{finding['level']}] {finding['message']}")
     for name, check in report["checks"].items():
         emit(f"\n--- {name}: {check['status']} ---")
+        if name == "ssh" and "configuration_source" in check:
+            emit("SSH configuration source: " + str(check["configuration_source"]))
+            if check.get("configuration_path") is not None:
+                emit("SSH configuration argument: " + str(check["configuration_path"]))
+            emit("SSH connection context: " + str(check.get("connection_context") or "Not supplied"))
         if name == "ports" and "listeners" in check:
             for item in check["listeners"]:
                 emit(f"{item['protocol']} {item['address']} | {item['binding']} | {item['process']}")
