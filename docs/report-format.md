@@ -78,11 +78,13 @@ Consumers should require a complete manifest, parse the report, verify expected 
 
 ## Compatibility
 
+The package-layout change moves implementation imports to `server_audit.*` and the historical fixture to `tests/fixtures/audit-contract.json`; it does not change `schema_version`, check names, field types, CLI options, collector order or report semantics. The JSON fixture and offline template bytes are preserved. Internal Python import paths are not a supported compatibility API.
+
 Keep existing fields and check names stable where possible. Consumers should tolerate additional fields/checks and handle unfamiliar statuses conservatively. Do not parse human finding messages as stable identifiers. The project currently has no published machine-readable JSON Schema or versioned API support policy.
 
 A breaking report change requires an explicit compatibility decision, schema-version review, updated fixtures/consumers and migration notes in these docs. Historical note: structured `checks.docker` replaced an earlier text-only `checks.docker_ports` field; that older format is not reproduced by current collectors.
 
-The [runner fixture](../fixtures/audit-contract.json) captures the pre-refactor contract. Tests separately assert intentional additions and optional-tool status changes. HTML and text are presentation formats; JSON is preferable for automation.
+The [runner fixture](../tests/fixtures/audit-contract.json) captures the pre-refactor contract. Tests separately assert intentional additions and optional-tool status changes. HTML and text are presentation formats; JSON is preferable for automation.
 
 ## External verification extension
 

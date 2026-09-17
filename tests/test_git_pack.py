@@ -11,9 +11,9 @@ import subprocess
 import tempfile
 import unittest
 
-import git_reader
-import git_secrets
-import reporting
+from server_audit.collectors import git_reader
+from server_audit.collectors import git_secrets
+from server_audit import reporting
 
 
 @unittest.skipUnless(os.name == 'posix' and shutil.which('git'), 'Requires local Git and POSIX pipes')

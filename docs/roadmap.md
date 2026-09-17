@@ -6,7 +6,7 @@
 
 Make the existing read-only auditor reliable to run, accurate to interpret and straightforward to validate. Preserve the explicit runner, focused collectors and offline reports until a concrete requirement justifies a change.
 
-The approved implementation scope is **R1–R4 and the separately approved G1 replacement below, with tests and owning documentation**. The roadmap itself is a reviewed plan, not authorization to implement its other entries. CI, packaging, additional checks and broader hardening remain unapproved proposals. New external-tool integrations require explicit approval before implementation; see [AGENTS.md](../AGENTS.md#external-tool-approval). No target dates, budgets, operational owners or release commitments have been assigned.
+The approved implementation scope is **R1–R4, G1 and the separately approved L1 layout change below, with tests and owning documentation**. The roadmap itself is a reviewed plan, not authorization to implement its other entries. CI, packaging, additional checks and broader hardening remain unapproved proposals. New external-tool integrations require explicit approval before implementation; see [AGENTS.md](../AGENTS.md#external-tool-approval). No target dates, budgets, operational owners or release commitments have been assigned.
 
 ## Merged delivery: four fixes
 
@@ -14,18 +14,24 @@ Baseline reviewed: `2f1a9d64d23dbb3c759d76c23a2e476cc8936c64`. R1–R4 and the s
 
 | ID | Outcome | Acceptance criteria and evidence |
 | --- | --- | --- |
-| R1 | Expected OS read and Git scratch failures preserve other evidence. | OS read/decode errors become an error check, not a clean fallback. Scratch setup/write/cleanup failures remain explicit; later repositories and unrelated checks survive. Programming errors are not swallowed. [Tests](../test_reliability.py), [handling](operations.md#scanner-failures-and-interruption). |
-| R2 | Interrupted scanners stop before scratch cleanup. | Timeout and KeyboardInterrupt use the same cleanup; the POSIX process group is stopped and the scanner reaped. Interruption propagates without a completed scan/report. Real synthetic SIGINT regression passes. [Current reader](../git_reader.py), [reader tests](../test_git_reader.py), [pipeline tests](../test_git_audit.py). |
-| R3 | Reports identify the attempted SSH configuration and context. | Scope remains visible on success, missing tools and tool failures. Text/JSON/HTML retain it; limitation wording matches on-disk scope rather than claiming running-daemon identity. [Contract](report-format.md#ssh-scope-and-repeated-settings), [tests](../test_ssh_evidence.py). |
-| R4 | Structured SSH evidence preserves repeated settings. | Ordered lists retain every selected occurrence. Legacy scalar fields, raw output and existing policy findings remain compatible; report schema stays at 1. The historical fixture is unchanged, with intentional deltas asserted in [runner tests](../test_runner.py). |
+| R1 | Expected OS read and Git scratch failures preserve other evidence. | OS read/decode errors become an error check, not a clean fallback. Scratch setup/write/cleanup failures remain explicit; later repositories and unrelated checks survive. Programming errors are not swallowed. [Tests](../tests/test_reliability.py), [handling](operations.md#scanner-failures-and-interruption). |
+| R2 | Interrupted scanners stop before scratch cleanup. | Timeout and KeyboardInterrupt use the same cleanup; the POSIX process group is stopped and the scanner reaped. Interruption propagates without a completed scan/report. Real synthetic SIGINT regression passes. [Current reader](../server_audit/collectors/git_reader.py), [reader tests](../tests/test_git_reader.py), [pipeline tests](../tests/test_git_audit.py). |
+| R3 | Reports identify the attempted SSH configuration and context. | Scope remains visible on success, missing tools and tool failures. Text/JSON/HTML retain it; limitation wording matches on-disk scope rather than claiming running-daemon identity. [Contract](report-format.md#ssh-scope-and-repeated-settings), [tests](../tests/test_ssh_evidence.py). |
+| R4 | Structured SSH evidence preserves repeated settings. | Ordered lists retain every selected occurrence. Legacy scalar fields, raw output and existing policy findings remain compatible; report schema stays at 1. The historical fixture is unchanged, with intentional deltas asserted in [runner tests](../tests/test_runner.py). |
 
 Do not implement additional proposals without approval. Documentation and tests travel with the fixes, not as deferred cleanup. A passing suite with disclosed skips is acceptable evidence for this patch, not certification of a production server or completion of native integrations.
 
 ## G1 — Approved built-in local Git replacement
 
-Status: implemented and locally tested on the feature branch; not yet merged or deployed. Replaces Gitleaks with Python candidate rules. The local Git executable is explicitly approved only to read config storage-format metadata and stored objects. The default per-repository budget is 60 seconds and can be selected through the CLI. No additional external tool or service is authorized.
+Status: merged in [PR #3](https://github.com/novakin/Server-Audit/pull/3), merge commit `66e930ef`, including the packed-storage follow-up. Deployment remains separate. Replaces Gitleaks with Python candidate rules. The local Git executable is explicitly approved only to read config storage-format metadata and stored objects. The default per-repository budget is 60 seconds and can be selected through the CLI. No additional external tool or service is authorized.
 
 Acceptance: inspect config and locally stored blob/commit/tag bytes, including packed/delta and unreachable objects still present; no working-file scan or remote fetch; redacted locations only; bounded input/time/counts; retain earlier findings on incomplete reads; preserve fatal cancellation/unconfirmed-shutdown behavior. Tests cover native storage and injected failures. See [scope](audit-reference.md#git-secrets), [decision](architecture.md#decision-built-in-local-git-secret-inspection) and [verification](development.md#built-in-local-git-inspection--2026-09-17). `AGENTS.md` now explicitly requires user approval before any new external-tool integration.
+
+## L1 — Approved repository layout
+
+Status: implemented and locally tested on the reorganisation branch; merge and deployment are separate. Keep the two launchers at root; move runtime into `server_audit/`, checks into `server_audit/collectors/`, the template into `server_audit/templates/`, and tests/fixtures into `tests/`. Retain the explicit runner, approval policy and copy-and-run operation. No new dependency, installer, CI, generic utility layer or behavioural feature is approved by this change.
+
+Acceptance: all previous test cases and skip gates retained; unchanged fixture/template bytes and deterministic JSON/text/HTML; both launchers and offline companion operations work from a runtime-only copy in another directory; user-relative paths preserved; module/mock/subprocess imports, agent guidance, runtime file lists and local documentation links updated. See [layout decision](architecture.md#decision-runtime-package-and-test-layout), [tests](../tests/test_layout.py) and [verification](development.md#package-layout-verification--2026-09-17). D1 distribution automation remains a separate proposal; a packaging smoke test does not authorise a release pipeline.
 
 ## Recommended next: separate approval required
 

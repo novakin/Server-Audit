@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from unittest.mock import Mock
 
-import reporting
-import ssh_audit
-from test_runner import fixture_report
+from server_audit import reporting
+from server_audit.collectors import ssh_audit
+from tests.helpers import fixture_report
 
 
 class SSHEvidenceTests(unittest.TestCase):

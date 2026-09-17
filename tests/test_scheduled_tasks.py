@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import scheduled_tasks as tasks
+from server_audit.collectors import scheduled_tasks as tasks
 
 
 class ParsingTests(unittest.TestCase):

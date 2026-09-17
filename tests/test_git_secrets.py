@@ -10,8 +10,8 @@ import time
 import unittest
 from unittest.mock import patch
 
-import git_reader
-import git_secrets
+from server_audit.collectors import git_reader
+from server_audit.collectors import git_secrets
 
 
 TOKEN = 'ghp_' + 'Ab3dEf7hIj9kLm2nOp4qRs6tUv8wXy0zABCD'
@@ -60,7 +60,7 @@ class RuleTests(unittest.TestCase):
         self.assertIn('github-token', {item['rule'] for item in found})
 
     def test_not_requested_never_looks_for_an_executable(self):
-        with patch('git_secrets.shutil.which') as which:
+        with patch('server_audit.collectors.git_secrets.shutil.which') as which:
             report, findings = git_secrets.collect()
         which.assert_not_called()
         self.assertEqual(report['status'], 'not_requested')
@@ -68,7 +68,7 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_missing_git_is_unavailable_not_a_clean_scan(self):
-        with patch('git_secrets.shutil.which', return_value=None) as which:
+        with patch('server_audit.collectors.git_secrets.shutil.which', return_value=None) as which:
             report, findings = git_secrets.collect(['/fixture/repository'])
         which.assert_called_once_with('git')
         self.assertEqual(report['status'], 'unavailable')
@@ -197,7 +197,7 @@ class LocalGitTests(unittest.TestCase):
 
     def test_explicit_git_directory_and_duplicate_roots_scan_once(self):
         self.commit_file()
-        with patch('git_secrets.scan_repository', wraps=git_secrets.scan_repository) as scan:
+        with patch('server_audit.collectors.git_secrets.scan_repository', wraps=git_secrets.scan_repository) as scan:
             report, _ = self.collect(str(self.root), str(self.root / '.git'), str(self.root))
         self.assertEqual(scan.call_count, 1)
         self.assertEqual(len(report['repositories']), 1)
@@ -224,7 +224,7 @@ class LocalGitTests(unittest.TestCase):
 
     def test_alternates_are_rejected_without_reader_execution(self):
         (self.root / '.git/objects/info/alternates').write_text(str(self.parent / 'outside'))
-        with patch('git_secrets.GitProcess') as reader:
+        with patch('server_audit.collectors.git_secrets.GitProcess') as reader:
             report, findings = self.collect()
         reader.assert_not_called()
         self.assertEqual(report['status'], 'partial')
@@ -292,7 +292,7 @@ class LocalGitTests(unittest.TestCase):
 
     def test_oversized_objects_are_skipped_before_content_requests(self):
         identifier = self.git('hash-object', '-w', '--stdin', data=b'x' * 1024 + TOKEN.encode())
-        with patch('git_secrets.MAX_OBJECT_BYTES', 100):
+        with patch('server_audit.collectors.git_secrets.MAX_OBJECT_BYTES', 100):
             report, _ = self.collect()
         scan = report['repositories'][0]['scans'][1]
         self.assertEqual(report['status'], 'partial')
@@ -314,23 +314,23 @@ class LocalGitTests(unittest.TestCase):
     def test_detection_limit_retains_only_bounded_findings(self):
         self.git('config', 'remote.origin.url', 'https://alice:PrivateSentinel42@example.invalid/repo')
         self.git('config', 'http.extraHeader', 'Authorization: Bearer PrivateSentinel42')
-        with patch('git_secrets.MAX_DETECTIONS', 1):
+        with patch('server_audit.collectors.git_secrets.MAX_DETECTIONS', 1):
             report, findings = self.collect()
         self.assertEqual(report['status'], 'partial')
         self.assertEqual(len(self.found(report)), 1)
         self.assert_private(report, findings, 'PrivateSentinel42')
 
     def test_metadata_limit_and_access_error_are_not_clean(self):
-        with patch('git_secrets.MAX_CONFIG_BYTES', 1):
+        with patch('server_audit.collectors.git_secrets.MAX_CONFIG_BYTES', 1):
             report, _ = self.collect()
         self.assertEqual(report['status'], 'partial')
-        with patch('git_secrets.read_local_file', side_effect=PermissionError('PRIVATE_SENTINEL')):
+        with patch('server_audit.collectors.git_secrets.read_local_file', side_effect=PermissionError('PRIVATE_SENTINEL')):
             report, findings = self.collect()
         self.assertEqual(report['status'], 'partial')
         self.assertNotIn('PRIVATE_SENTINEL', json.dumps([report, findings]))
 
     def test_expired_budget_stops_without_starting_git(self):
-        with patch('git_secrets.GitProcess') as reader:
+        with patch('server_audit.collectors.git_secrets.GitProcess') as reader:
             report, findings = self.collect(scan_seconds=1e-12)
         reader.assert_not_called()
         self.assertEqual(report['status'], 'partial')
@@ -367,7 +367,7 @@ class LocalGitTests(unittest.TestCase):
         self.assert_private(report, findings)
 
     def test_programming_errors_are_not_silently_converted_to_scan_results(self):
-        with patch('git_secrets.inspect_storage', side_effect=TypeError('programming defect')):
+        with patch('server_audit.collectors.git_secrets.inspect_storage', side_effect=TypeError('programming defect')):
             with self.assertRaises(TypeError):
                 self.collect()
 

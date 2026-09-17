@@ -8,7 +8,7 @@ import shutil
 import stat
 import time
 
-from git_reader import (GitProcess, GitReadError, GitReadLimit, command, environment,
+from server_audit.collectors.git_reader import (GitProcess, GitReadError, GitReadLimit, command, environment,
                         object_format, read_local_file, remaining, repository_view)
 
 

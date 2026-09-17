@@ -4,6 +4,8 @@
 
 Reference for what each audit observes, what it exports and what remains unverified. Configuration evidence and review signals are not a security certification.
 
+Runtime collectors and their domain helpers are under `server_audit/collectors/`; the two public launchers remain at the repository root. The layout change does not extend the scopes or detection rules described here.
+
 ## Checks
 
 - Effective default SSH settings using `sshd -T`, with recommendations for root login, password authentication, empty passwords and forwarding.
@@ -67,7 +69,7 @@ Ruleset version 1 has eight fixed IDs:
 | `authorization-header` | Basic/Bearer credential-shaped header values. No decoding or validation. |
 | `credential-assignment` | Bounded literal password, token, API-key or secret-key assignments; selected exact placeholders and environment/template references are excluded. |
 
-Exact regexes and exclusions live in [git_secrets.py](../git_secrets.py), not a downloaded ruleset. Repository allow comments and suppression files do not disable detection. These are intentionally focused heuristics: there can be false positives and missed secrets, including unsupported providers/formats and encoded/encrypted data. No equivalence to Gitleaks or exhaustive credential coverage is claimed. Detection must be reviewed locally before remediation.
+Exact regexes and exclusions live in [git_secrets.py](../server_audit/collectors/git_secrets.py), not a downloaded ruleset. Repository allow comments and suppression files do not disable detection. These are intentionally focused heuristics: there can be false positives and missed secrets, including unsupported providers/formats and encoded/encrypted data. No equivalence to Gitleaks or exhaustive credential coverage is claimed. Detection must be reviewed locally before remediation.
 
 ### Bounds, isolation and evidence
 

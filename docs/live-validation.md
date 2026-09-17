@@ -2,6 +2,8 @@
 
 [Documentation index](../README.md) · [Development guide](development.md)
 
+This page preserves a historical native-lab run, including its original flat-layout commands and former Gitleaks integration. It is not a new validation of the current package. For current test commands and skips, use the [development guide](development.md#local-setup).
+
 ## Environment and scope
 
 Validation used a disposable Debian 13 (trixie) root filesystem bootstrapped from Debian's signed archive, running on the WSL2 Linux kernel. Separate mount, PID and network namespaces isolated the test services and firewall rules. This exercised real Debian tools, not mocked command responses. It was not a standalone Debian VM or a production deployment.
@@ -40,11 +42,17 @@ Real Docker inspection exposed two template errors that mocked responses had not
 1. Containers without health checks omit `State.Health`. Direct field access failed. The projection now uses a guarded map lookup and exports `null` when absent.
 2. Containers can have a null `Config.Env`. Applying `len` directly failed. The projection now exports zero for null/absent environment entries.
 
-The changes remain in `docker_audit.py`, the owning collector. `test_live_integrations.py` retains native regression coverage for both cases. No architecture layer or dependency was added to the audit runtime.
+The changes remain in `server_audit/collectors/docker_audit.py`, the owning collector. `tests/test_live_integrations.py` retains native regression coverage for both cases. No architecture layer or dependency was added to the audit runtime.
 
 ## Repeatable live-test fixture contract
 
 The opt-in tests do not provision a server. Prepare an isolated, disposable Linux environment first; do not run the fixture setup against a production host. Normal test discovery skips these checks. Explicit activation requires root and `/run/server-security-audit-integration-lab`; the marker is a misuse guard, not an isolation mechanism.
+
+For an already prepared authorised disposable lab, run from the current repository root:
+
+```bash
+AUDIT_LIVE_INTEGRATION=1 python3 -m unittest tests.test_live_integrations -v
+```
 
 The fixture must provide:
 

@@ -10,7 +10,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-import git_reader
+from server_audit.collectors import git_reader
 
 
 class ReaderUnitTests(unittest.TestCase):
@@ -27,7 +27,7 @@ class ReaderUnitTests(unittest.TestCase):
         self.assertEqual(env['GIT_OBJECT_DIRECTORY'], '/fixture/objects')
 
     def test_failed_launch_is_visible_not_success(self):
-        with patch('git_reader.subprocess.Popen', side_effect=OSError('PRIVATE_SENTINEL')):
+        with patch('server_audit.collectors.git_reader.subprocess.Popen', side_effect=OSError('PRIVATE_SENTINEL')):
             with self.assertRaises(OSError):
                 with git_reader.GitProcess(['fixture'], {}, '.', time.monotonic() + 5):
                     self.fail('Reader must not start')
@@ -35,14 +35,14 @@ class ReaderUnitTests(unittest.TestCase):
     @unittest.skipUnless(os.name == 'posix', 'POSIX process groups')
     def test_exit_signal_race_still_reaps_with_bounded_grace(self):
         process = Mock(pid=12345)
-        with patch('git_reader.os.killpg', side_effect=ProcessLookupError()):
+        with patch('server_audit.collectors.git_reader.os.killpg', side_effect=ProcessLookupError()):
             git_reader.stop_reader(process)
         process.wait.assert_called_once_with(timeout=git_reader.STOP_SECONDS)
 
     @unittest.skipUnless(os.name == 'posix', 'POSIX process groups')
     def test_failed_signalling_is_fatal_and_diagnostic_is_redacted(self):
         process = Mock(pid=12345)
-        with patch('git_reader.os.killpg', side_effect=PermissionError('PRIVATE_SENTINEL')):
+        with patch('server_audit.collectors.git_reader.os.killpg', side_effect=PermissionError('PRIVATE_SENTINEL')):
             with self.assertRaises(git_reader.GitShutdownError) as caught:
                 git_reader.stop_reader(process)
         self.assertIn('12345', str(caught.exception))
@@ -55,14 +55,14 @@ class ReaderUnitTests(unittest.TestCase):
         for error, expected in cases:
             process = Mock(pid=12345)
             process.wait.side_effect = error
-            with self.subTest(error=type(error).__name__), patch('git_reader.os.killpg', create=True):
+            with self.subTest(error=type(error).__name__), patch('server_audit.collectors.git_reader.os.killpg', create=True):
                 with self.assertRaises(expected):
                     git_reader.stop_reader(process)
 
     def test_cancellation_is_preserved_when_shutdown_fails(self):
         reader = git_reader.GitProcess(['fixture'], {}, '.', time.monotonic() + 5)
         reader.process = Mock(returncode=None)
-        with patch('git_reader.stop_reader', side_effect=git_reader.GitShutdownError('safe diagnostic')):
+        with patch('server_audit.collectors.git_reader.stop_reader', side_effect=git_reader.GitShutdownError('safe diagnostic')):
             with self.assertRaises(git_reader.GitShutdownInterrupted):
                 reader.__exit__(KeyboardInterrupt, KeyboardInterrupt(), None)
         reader.process.stdin.close.assert_called_once()
@@ -74,17 +74,17 @@ class ReaderUnitTests(unittest.TestCase):
         reader.process = Mock(returncode=None)
         original = git_reader.GitShutdownInterrupted('Reader PID 111 unconfirmed.')
         failure = git_reader.GitShutdownError('Reader PID 222 unconfirmed.')
-        with patch('git_reader.stop_reader', side_effect=failure):
+        with patch('server_audit.collectors.git_reader.stop_reader', side_effect=failure):
             with self.assertRaises(git_reader.GitShutdownInterrupted) as caught:
                 reader.__exit__(type(original), original, None)
         self.assertIn('111', str(caught.exception))
         self.assertIn('222', str(caught.exception))
 
     def test_pipe_setup_failure_stops_the_already_started_reader(self):
-        with patch('git_reader.subprocess.Popen') as factory:
+        with patch('server_audit.collectors.git_reader.subprocess.Popen') as factory:
             process = factory.return_value
             process.returncode = None
-            with patch('git_reader.os.set_blocking', side_effect=OSError('fixture')), patch('git_reader.stop_reader') as stop:
+            with patch('server_audit.collectors.git_reader.os.set_blocking', side_effect=OSError('fixture')), patch('server_audit.collectors.git_reader.stop_reader') as stop:
                 with self.assertRaises(OSError):
                     with git_reader.GitProcess(['fixture'], {}, '.', time.monotonic() + 5):
                         self.fail('Pipe setup must fail')
@@ -118,7 +118,7 @@ class ReaderUnitTests(unittest.TestCase):
     def test_workspace_cleanup_error_does_not_mask_interruption(self):
         directory = None
         try:
-            with patch('git_reader.shutil.rmtree', side_effect=OSError('PRIVATE_SENTINEL')):
+            with patch('server_audit.collectors.git_reader.shutil.rmtree', side_effect=OSError('PRIVATE_SENTINEL')):
                 with self.assertRaises(KeyboardInterrupt):
                     with git_reader.repository_view() as directory:
                         raise KeyboardInterrupt()
@@ -129,7 +129,7 @@ class ReaderUnitTests(unittest.TestCase):
     def test_workspace_cleanup_error_on_success_is_not_silent(self):
         directory = None
         try:
-            with patch('git_reader.shutil.rmtree', side_effect=OSError('PRIVATE_SENTINEL')):
+            with patch('server_audit.collectors.git_reader.shutil.rmtree', side_effect=OSError('PRIVATE_SENTINEL')):
                 with self.assertRaises(git_reader.GitReadError) as caught:
                     with git_reader.repository_view() as directory:
                         pass
@@ -295,10 +295,10 @@ time.sleep(30)
         wrapper = """
 import contextlib,os,signal,sys,time
 from unittest.mock import patch
-import git_reader
+from server_audit.collectors import git_reader
 deny_stop = sys.argv[3] == 'denied'
 reader = None
-failure = patch('git_reader.os.killpg', side_effect=PermissionError('PRIVATE_SENTINEL')) if deny_stop else contextlib.nullcontext()
+failure = patch('server_audit.collectors.git_reader.os.killpg', side_effect=PermissionError('PRIVATE_SENTINEL')) if deny_stop else contextlib.nullcontext()
 try:
     with failure:
         with git_reader.GitProcess([sys.executable, '-c', sys.argv[1], sys.argv[2]], {}, '.', time.monotonic()+30) as reader:
@@ -327,7 +327,7 @@ finally:
                 marker = Path(folder) / 'reader.pid'
                 parent = subprocess.Popen(
                     [sys.executable, '-c', wrapper, child, str(marker), mode],
-                    cwd=Path(__file__).parent, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=Path(__file__).resolve().parents[1], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     text=True, start_new_session=True,
                 )
                 child_pid = None
