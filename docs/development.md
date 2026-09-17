@@ -1,6 +1,6 @@
 # Development and verification
 
-[Documentation index](../README.md) · Internal engineering documentation · Reviewed 2026-09-18
+[Documentation index](../README.md) · Internal engineering documentation · Reviewed 2026-09-18 (Europe/Berlin)
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
@@ -30,7 +30,7 @@ Do not run a test by its file path as a standalone script, or use bare former mo
 
 | Tests | Coverage |
 | --- | --- |
-| `tests/test_ci.py` | CI prerequisite and skip policy; no native tools required |
+| `tests/test_ci.py` and `tests/test_live_ci.py` | Routine prerequisites/skip policy and strict live-test acceptance; no native tools required |
 | `tests/test_layout.py` | Runtime-only copy, lazy initializers, thin-launcher exit codes, caller-relative paths and no-network companion operations |
 | `tests/test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `tests/test_runner.py` and `tests/fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
@@ -72,7 +72,7 @@ README is the entry point. Operations owns setup and handling; audit reference o
 
 ## Continuous integration
 
-[CI](../.github/workflows/ci.yml) runs one `Linux tests` job on GitHub-hosted `ubuntu-24.04` with Python `3.13`. Pull requests (including stacked PRs), pushes to `main` and manual dispatch use the same routine suite. Documentation-only PRs also run this short job; documentation accuracy still requires reviewing examples, links and claims.
+[CI](../.github/workflows/ci.yml) starts with the `Linux tests` job on GitHub-hosted `ubuntu-24.04` with Python `3.13`. Pull requests (including stacked PRs), pushes to `main` and manual dispatch use the same routine suite. Documentation-only PRs also run this short job; documentation accuracy still requires reviewing examples, links and claims.
 
 The workflow compiles Python files, then invokes the standard-library [CI runner](../tests/ci.py) once:
 
@@ -82,17 +82,27 @@ python -m tests.ci
 
 Run from the repository root. The runner requires Linux, Git and `ssh-keygen`; it installs nothing. The official setup-python action may provision Python on the disposable runner. Preflight refuses an enabled `AUDIT_LIVE_INTEGRATION`. Missing prerequisites, zero tests, test failures and unexpected skips fail the job. Only the four exact prepared-lab test identities listed in `tests/ci.py` may be skipped; additions or changes require review. There is no fixed total-test-count gate. Use ordinary unittest locally where those CI prerequisites are unavailable, and disclose its skips rather than weakening the CI policy.
 
-Tests use disposable repositories, synthetic credentials, mocked public endpoints and loopback sockets. This job does not provision the SSH/Docker/firewall lab, audit production or deploy anything. The existing lab remains an explicit, separate workflow described in [live validation](live-validation.md).
+Tests use disposable repositories, synthetic credentials, mocked public endpoints and loopback sockets. This job does not provision the SSH/Docker/firewall lab, audit production or deploy anything. After it succeeds, the separate `Ubuntu live integration` job prepares and checks those services on a fresh hosted VM, as described below.
 
-The two official actions are pinned to full commit SHAs, with release labels in comments. Review upstream changes before updating those pins. Token permissions are `contents: read`, checkout does not persist credentials, and no production secrets are passed to tests. There are no caches, third-party testing packages, artifact uploads or privileged PR triggers. A ten-minute job timeout bounds hung runs; a newer run cancels obsolete work for the same PR/ref.
+The two official actions are pinned to full commit SHAs, with release labels in comments. Review upstream changes before updating those pins. Token permissions are `contents: read`, checkout does not persist credentials, and no production secrets are passed to tests. There are no caches, third-party testing packages, artifact uploads or privileged PR triggers. The routine job has a ten-minute timeout; the integration job has a twenty-minute timeout; a newer run cancels obsolete work for the same PR/ref.
 
 Logs record OS/Python/Git versions and revision IDs; the job summary reports results and skip reasons. On a PR, the tested revision is the default checkout merge revision, not just the contributor's head SHA. Targeted tests are for local iteration; do not duplicate the focused Git suite and full suite within the same CI job. Push revised code and use its new CI result before approval.
 
-### Make the check required
+### Ubuntu live integration
 
-After `Linux tests` has succeeded on GitHub, a repository administrator should require that exact check for `main`, preferably bound to the GitHub Actions app. Retain existing access and review rules. The workflow does not configure branch protection, and a running job is not proof of enforcement. Verify the setting in repository rules/branch protection; availability depends on repository plan and permissions. Do not claim enforcement until it is read back successfully.
+`Ubuntu live integration` declares `needs: linux-tests`. It is not scheduled when routine tests fail or are skipped; a later push starts a new workflow run. Both jobs use the same event revision on separate hosted Ubuntu 24.04 VMs. All four live checks share one lab; they are not four separately provisioned jobs.
 
-For stacked work, merge the CI PR first. Retarget the test-cleanup PR to `main` once its dependency is merged and confirm a successful check on the resulting revision. Do not merge the cleanup into the CI branch.
+The [lab script](../tests/integration_lab.sh) installs native fixture packages, generates temporary keys, starts a loopback-only SSH daemon, imports a local BusyBox image and creates the two expected containers. It adds unhooked firewall evidence chains without flushing existing rules. Setup is allowed only with root and an explicit disposable-VM acknowledgement, and refuses conflicting fixture paths, containers, image names and firewall resources. These guards are not a sandbox: the fresh hosted VM is the isolation boundary. Never run preparation on an operational server.
+
+The [live runner](../tests/live_ci.py) requires the exact four test identities excluded by routine CI. All must execute and pass with zero skips or expected failures. Provisioning, readiness, test and cleanup failures fail the job. Readiness is polled within deadlines. EXIT/INT/TERM handling cleans lab-owned processes, keys, containers, image, files and firewall resources; an original failure remains a failure even when cleanup also fails. Forced termination can prevent traps, so VM disposal remains the final boundary. Packages are not uninstalled; they disappear with the VM.
+
+No registry image, self-hosted runner, external probe target or new runtime dependency is introduced. Package downloads occur only during CI setup. This job validates the recorded Ubuntu toolchain, not every Ubuntu release or a new Debian run. See [live validation](live-validation.md#automated-ubuntu-lab) for the fixture contract, invocation and evidence limits.
+
+### Make the checks required
+
+After both jobs have succeeded on GitHub, a repository administrator should require both `Linux tests` and `Ubuntu live integration` for `main`, preferably bound to the GitHub Actions app. Requiring both avoids treating an integration job skipped after an upstream failure as successful overall verification. Retain existing access and review rules. The workflow does not configure branch protection, and a running job is not proof of enforcement. Verify the setting in repository rules/branch protection; availability depends on repository plan and permissions. Do not claim enforcement until it is read back successfully.
+
+For stacked work, merge the dependency first, retarget the dependent PR to `main` and confirm successful checks on the resulting revision. Do not merge a dependent change into its temporary base branch.
 
 ### Documentation and completion
 

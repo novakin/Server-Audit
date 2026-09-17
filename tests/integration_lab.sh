@@ -16,12 +16,12 @@ umask 077
 lab=/opt/lab
 results=/results
 marker=/run/server-security-audit-integration-lab
-keys=/opt/lab/authorized_keys
+keys=/run/server-security-audit-authorized_keys
 image=server-audit-integration:local
 nft_table=server_audit_integration
 iptables_chain=AUDIT_INTEGRATION
 sshd_pid=''
-created_lab=0 created_results=0 created_marker=0
+created_lab=0 created_results=0 created_marker=0 created_keys=0
 created_run_sshd=0 created_policy=0
 created_image=0 created_web=0 created_stopped=0 created_nft=0 created_iptables=0
 
@@ -74,6 +74,7 @@ cleanup() {
         done
     fi
     ((created_marker)) && cleanup_command rm -- "$marker"
+    ((created_keys)) && cleanup_command rm -- "$keys"
     ((created_run_sshd)) && cleanup_command rmdir /run/sshd
     ((created_policy)) && cleanup_command rm -- /usr/sbin/policy-rc.d
     ((created_results)) && cleanup_command rm -rf -- "$results"
@@ -126,7 +127,7 @@ if [[ ! -d /run/sshd ]]; then mkdir -m 755 /run/sshd; created_run_sshd=1; fi
 ssh-keygen -q -t ed25519 -N '' -f "$lab/host_key"
 ssh-keygen -q -t ed25519 -N '' -f "$lab/client_key"
 chmod 600 "$lab/host_key" "$lab/client_key"
-cp "$lab/client_key.pub" "$keys"
+cp "$lab/client_key.pub" "$keys"; created_keys=1
 chown root:root "$keys" "$lab/host_key" "$lab/client_key"
 chmod 600 "$keys"
 stat -c 'Lab permissions: %U:%G %a %n' "$lab" "$keys" "$lab/host_key"
@@ -136,7 +137,7 @@ Port 22222
 ListenAddress 127.0.0.1
 HostKey /opt/lab/host_key
 PidFile /opt/lab/sshd.pid
-AuthorizedKeysFile /opt/lab/authorized_keys
+AuthorizedKeysFile /run/server-security-audit-authorized_keys
 PermitRootLogin prohibit-password
 AuthenticationMethods publickey
 PubkeyAuthentication yes
