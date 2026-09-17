@@ -9,6 +9,18 @@ import tempfile
 from pathlib import Path
 
 
+def _stop_scanner(process):
+    """Stop the private process group and reap the scanner before scratch cleanup."""
+    try:
+        if os.name == 'posix':
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+    except ProcessLookupError:
+        pass  # The scanner/group may have exited between the wait and signal.
+    process.wait()
+
+
 def execute(command):
     """Discard scanner logs: they must never enter the audit report."""
     environment = {key: value for key, value in os.environ.items() if not key.startswith(('GITLEAKS_', 'GIT_'))}
@@ -19,12 +31,11 @@ def execute(command):
             try:
                 process.wait(timeout=120)
             except subprocess.TimeoutExpired:
-                if os.name == 'posix':
-                    os.killpg(process.pid, signal.SIGKILL)
-                else:
-                    process.kill()
-                process.wait()
+                _stop_scanner(process)
                 return None
+            except KeyboardInterrupt:
+                _stop_scanner(process)
+                raise
             return process.returncode
     except OSError:
         return None
@@ -101,8 +112,10 @@ def collect(roots=None):
             result['status'] = 'partial'
             findings.append({'level': 'UNKNOWN', 'message': f'Git secret scan: {root} is not a repository root.'})
             continue
-        with tempfile.TemporaryDirectory(prefix='server-audit-gitleaks-') as temporary:
-            scratch = Path(temporary)
+        temporary = None
+        try:
+            temporary = tempfile.TemporaryDirectory(prefix='server-audit-gitleaks-')
+            scratch = Path(temporary.name)
             (scratch / 'config.toml').write_text('[extend]\nuseDefault = true\n', encoding='utf-8')
             (scratch / '.gitleaksignore').write_text('', encoding='utf-8')
             for mode in (('git',) if bare else ('git', 'dir')):
@@ -113,5 +126,20 @@ def collect(roots=None):
                     findings.append({'level': 'UNKNOWN', 'message': f"Git {root}: {scan['mode']} secret scan incomplete. See scanner status."})
                 for detection in scan['detections']:
                     findings.append({'level': 'REVIEW', 'message': f"Git {root}: possible secret ({detection['rule']}) in {detection['file']}:{detection['start_line']} [{scan['mode']}]. If real, revoke/rotate it and investigate exposure; deleting the file alone does not revoke a credential."})
-        repository['status'] = 'ok' if all(scan['status'] == 'ok' for scan in repository['scans']) else 'partial'
+        except OSError:
+            repository.update(status='partial' if repository['scans'] else 'error',
+                              detail='Private scanner scratch setup or access failed; scan incomplete. Raw error withheld.')
+            findings.append({'level': 'UNKNOWN', 'message': f'Git {root}: scanner scratch setup or access failed; see repository evidence.'})
+        finally:
+            if temporary is not None:
+                try:
+                    temporary.cleanup()
+                except OSError:
+                    # Do not mask an active interruption or a programming error.
+                    repository.update(status='partial' if repository['scans'] else 'error',
+                                      cleanup_status='error', scratch_path=temporary.name)
+                    findings.append({'level': 'UNKNOWN', 'message': f'Git {root}: private scanner scratch cleanup failed at {temporary.name}; restricted files may remain. Review locally.'})
+        repository.setdefault('status', 'ok' if all(scan['status'] == 'ok' for scan in repository['scans']) else 'partial')
+        if repository['status'] != 'ok':
+            result['status'] = 'partial'
     return result, findings

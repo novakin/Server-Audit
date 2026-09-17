@@ -20,6 +20,22 @@ The authoritative serialized evidence is `data/report.json` in an export bundle,
 
 Evidence shapes differ by collector. Inspect the matching collector and tests when consuming nested data. Account/native-command records may contain status/output/detail; inventories use structured objects. Missing fields, null values and empty inventories have different meanings. Do not treat an absent inventory as an empty successful scan.
 
+## SSH scope and repeated settings
+
+The following additive fields in `checks.ssh` do not change `schema_version: 1`:
+
+| Field | Contract |
+| --- | --- |
+| `configuration_source` | `default` or `custom`, recording the configuration selection attempted, even if collection fails. |
+| `configuration_path` | The `--ssh-config` argument exactly as supplied, or `null` for the sshd default. A relative argument is not a resolved absolute path or proof of the running daemon's configuration. |
+| `connection_context` | The `--ssh-context` argument exactly as supplied, or `null`. It describes the requested evaluation, not an observed SSH session. |
+| `selected_settings` | Existing scalar mapping, unchanged: the last occurrence for each selected setting. Retained for older consumers; not a complete multivalue inventory. |
+| `selected_setting_values` | On successful collection, the same selected keys mapped to lists of all observed values in output order, including single occurrences. Each value is one entire value portion of an output line; it is not additionally tokenized. |
+
+For example, `port 22` followed by `port 2222` retains legacy `selected_settings.port: "2222"` and adds `selected_setting_values.port: ["22", "2222"]`. `listenaddress` and any other repeated selected key receive the same treatment. Raw `output` and existing policy findings are preserved. Failed collection has attempted scope but no invented effective settings.
+
+Consumers needing all values should prefer the new map. For older reports without it, inspect raw output rather than assuming the legacy scalar is complete. Old reports still render. New text reports add scope lines before SSH raw evidence; HTML exposes the additive fields in collected evidence. The general SSH limitation now describes the selected on-disk configuration, not unconditionally the installed default. No evidence establishes what configuration the running daemon loaded.
+
 ## Check statuses
 
 | Status | Meaning |
@@ -34,6 +50,8 @@ Evidence shapes differ by collector. Inspect the matching collector and tests wh
 Nested records may use additional domain statuses such as `unknown`, `inspected` or `binary_metadata_only`. Do not apply the top-level table blindly to every nested object. In particular, Docker can have top-level `ok` while one container inspection failed; inspect findings and nested statuses.
 
 `REVIEW` means observed evidence merits a local decision. `UNKNOWN` means a relevant conclusion cannot be reached from available evidence. There is no severity ranking, compliance certification or malware verdict. Missing optional firewall tools do not create individual findings, but lack of any readable kernel backend creates a consolidated Unknown finding.
+
+OS metadata read/decode errors return an `error` check and the runner adds an Unknown finding. Requested Git scratch setup/access errors preserve other evidence: affected repositories are `error` without scan evidence or `partial` with evidence, and the overall Git check is `partial` with an Unknown finding. On cleanup failure, the repository additionally records `cleanup_status: error` and `scratch_path`; report handling remains restricted. See [scanner handling](operations.md#scanner-failures-and-interruption). These changes do not redefine Docker/account statuses or turn interruption into a completed report.
 
 ## Export manifest
 

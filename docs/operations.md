@@ -6,7 +6,7 @@ Run an audit on an authorized Ubuntu/Debian host, retain its evidence privately,
 
 ## Prerequisites and installation
 
-The runtime uses Python 3 and its standard library. There is no pip requirements file or automatic dependency installer. Ubuntu WSL and Debian 13 userland in an isolated WSL2 lab have been exercised; standalone Debian systemd-host validation remains outstanding. See [live validation](live-validation.md) for tested versions and limits. A minimum Python version has not been established by a compatibility test matrix. Record `python3 --version` for the environment being assessed.
+The runtime uses Python 3 and its standard library. There is no pip requirements file or automatic dependency installer. Ubuntu WSL and Debian 13 userland in an isolated WSL2 lab have been exercised; standalone Debian systemd-host validation remains outstanding. See [live validation](live-validation.md) for tested versions and limits. A minimum host-audit Python version has not been established by a compatibility test matrix. The separate [external companion](external-verification.md#cli-and-automation) requires Python 3.9 or newer. Record `python3 --version` for the environment being assessed.
 
 Copy every runtime file in the [architecture table](architecture.md#architecture-and-extending-audits), including `report_template.html`, into one trusted directory on the server. Do not copy `.artifacts`, collected reports, cached bytecode or local scanner test binaries. Keep source and template from the same reviewed revision or source snapshot. The script directory and native tool directories must not be writable by untrusted users when running as root.
 
@@ -36,7 +36,7 @@ sudo python3 audit.py --export /var/lib/server-security-audit
 
 Choose a trusted export parent and run on the target host. Normal inspection may create system log records. Export writes a local report folder; requested Git scans also create temporary scanner files. The audit does not modify service configuration, permissions, package metadata or schedules.
 
-Review the export path written to stderr. Confirm `manifest.json` has `status: complete`, then open `report.html` locally or transfer the complete folder through your approved secure channel. A completed bundle can contain incomplete checks.
+Review the export path written to stderr. Confirm `manifest.json` has `status: complete`, then open `report.html` locally or transfer the complete folder through your approved secure channel. A completed bundle can contain incomplete checks. Expected OS metadata read failures and Git scanner scratch setup/access failures are recorded without discarding other collected evidence. A missing `/etc/os-release` retains the existing platform-identity fallback; an unreadable file is an error, not that fallback.
 
 ## CLI reference
 
@@ -64,11 +64,17 @@ Prefer export bundles for stored audits. If redirecting stdout, set a restrictiv
 (umask 077; sudo python3 audit.py --json > audit-report.json)
 ```
 
+## Scanner failures and interruption
+
+Git scratch creation or control-file writes that fail leave the requested repository `error` (no scan completed) or `partial` (some scan evidence retained); the overall Git check is `partial` with an Unknown finding. Raw scratch error strings are withheld. Later selected repositories and other collectors can still run. A cleanup failure on an otherwise completed run preserves evidence and records `cleanup_status: error` and `scratch_path` for restricted local follow-up; it must not be interpreted as clean completion.
+
+Ctrl+C while waiting for the scanner force-stops its private POSIX process group and waits for the scanner before scratch cleanup. This reuses the timeout cleanup, without a new process framework. Interruption propagates; the host CLI does not export a completed audit or claim a successful scan. This is not checkpoint/resume support or a guarantee against uncatchable termination (for example SIGKILL or power loss). On interruption, cleanup errors do not mask the interruption; inspect private temporary storage locally when necessary.
+
 ## Review workflow
 
 For actual off-host TCP observations, follow the [external-verification runbook](external-verification.md). Run its companion from an independent machine after exporting the snapshot; it is not an `audit.py` option and is never run automatically. Offline import creates a new bundle while retaining the original audit.
 
-1. Confirm host identity, audit time and intended SSH/repository/environment scope.
+1. Confirm host identity, audit time and intended SSH/repository/environment scope. The SSH check retains default/custom selection, the configuration argument as supplied, and the connection context even on failure. See the [SSH evidence contract](report-format.md#ssh-scope-and-repeated-settings) for exact fields and repeated values.
 2. Read coverage and Unknown findings first. Distinguish skipped optional tools from failed or partial collection.
 3. Review findings with their collected evidence. A Review finding is a prompt for investigation, not proof of exploitation.
 4. Validate relevant service configuration, account authorization and external exposure separately. Record the evidence and decision in your internal change or incident record.
@@ -108,7 +114,7 @@ On Linux, audit folders and data directories are created with mode `0700`; files
 
 Treat every report as restricted internal operational data. Hostnames, usernames, addresses, filesystem paths, service details, sudo policy and public-key fingerprints can be sensitive even when secret values are omitted. Full stdout and native evidence may also be sensitive. See [per-audit exclusions](audit-reference.md) before sharing a subset.
 
-Keep reports outside source control and public web roots. Restrict access and use approved encrypted transfer/storage. The source repository is public. `.gitignore` excludes standard report directories, `.artifacts`, bytecode and common secret files; custom report destinations still require explicit review before staging. No automated publication pipeline is configured.
+Keep reports outside source control and public web roots. Restrict access and use approved encrypted transfer/storage. Source visibility does not change report confidentiality. `.gitignore` excludes standard report directories, `.artifacts`, bytecode and common secret files; custom report destinations still require explicit review before staging. No automated publication pipeline is configured.
 
 There is no retention policy built into the script, and no automatic deletion. The internal system owner must choose retention, access and disposal rules for the environment. No owner, retention duration or support SLA has been assigned in these docs. A suspected credential leak belongs in the existing internal incident process; do not paste raw secrets or full audit bundles into broadly visible tickets.
 

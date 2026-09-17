@@ -7,7 +7,13 @@ from pathlib import Path
 
 def collect_os():
     os_release = Path("/etc/os-release")
-    return {"status": "ok", "output": os_release.read_text() if os_release.exists() else platform.platform()}
+    try:
+        output = os_release.read_text()
+    except FileNotFoundError:
+        output = platform.platform()
+    except (OSError, UnicodeError) as error:
+        return {"status": "error", "detail": str(error)}
+    return {"status": "ok", "output": output}
 
 
 def collect_services_and_updates(run):

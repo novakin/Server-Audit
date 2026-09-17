@@ -4,6 +4,27 @@
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
+## Reliability and SSH fixes — 2026-09-17
+
+Local verification for the four review fixes used a Debian 13 Linux container with Python 3.13.5. This was not a fully booted systemd test host or a production audit. The original runtime files, template, test files and runner fixture were verified against GitHub blob identities at baseline `2f1a9d64d23dbb3c759d76c23a2e476cc8936c64` before applying changes.
+
+| Run | Result |
+| --- | --- |
+| Unmodified baseline | 87 discovered; 81 passed, 6 skipped; no failures. |
+| New focused regressions | 21 passed: 15 reliability/process tests and 6 SSH evidence tests. |
+| Complete changed suite | 108 discovered; 102 passed, 6 skipped; no failures. |
+
+The six skips were one native OpenSSH key-generation test (`ssh-keygen` absent), one opt-in real Gitleaks test (not enabled), and four prepared-lab integration tests (not enabled). Existing skip gates were not broadened. The passing new process test sends real SIGINT to a wrapper and verifies its synthetic scanner has stopped and been reaped; it does not invoke Gitleaks or scan repositories for credentials. Native IPv4/IPv6 loopback tests also passed. No tools were installed, host audits run, production targets probed, or CI workflows enabled for this change.
+
+```bash
+python3 -m unittest test_reliability test_ssh_evidence -v
+python3 -m unittest discover -s . -p 'test_*.py' -v
+```
+
+Tests cover OS permission/read/decode errors, unchanged missing-file fallback, scanner scratch creation/control-file/cleanup failures, evidence preservation across repositories and runner checks, propagated programming errors/interruptions, timeout cleanup, private output/redaction, SSH scope on success and failure, repeated values, legacy rendering and the unchanged schema. The historical `fixtures/audit-contract.json` stays byte-for-byte unchanged; `test_runner.py` explicitly asserts the intended additions and corrected limitation.
+
+The HTML template/layout is unchanged. Synthetic export tests verify escaping, additive evidence, unchanged source JSON and completion manifests. No new visual browser review, real scanner/OpenSSH integration or systemd-host validation is claimed. Earlier native and browser runs below are separate historical evidence; the [documented live gaps](live-validation.md#remaining-limits) remain open.
+
 ## Local setup
 
 Use a trusted local copy and Python 3. No third-party Python dependencies are required. Run unit tests from the project root. Use Linux or Ubuntu WSL for POSIX coverage; Windows can run portable tests but intentionally skips Linux-specific cases. Avoid running a full host audit when a mocked collector test answers the question.
@@ -27,6 +48,8 @@ The integration test is skipped when `AUDIT_TEST_GITLEAKS_PATH` is unset or the 
 | --- | --- |
 | `test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `test_runner.py` and `fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
+| `test_reliability.py` | OS/scratch failures, evidence preservation and synthetic scanner timeout/interruption cleanup |
+| `test_ssh_evidence.py` | Attempted SSH scope, repeated values, additive compatibility and export/rendering |
 | `test_accounts.py` | Accounts, permissions, keys and observed usage |
 | `test_docker_audit.py` | Container projection, findings, absent CLI and daemon failures |
 | `test_env_files.py` | Metadata-only file handling, scope limits and application references |
@@ -46,13 +69,15 @@ The integration test is skipped when `AUDIT_TEST_GITLEAKS_PATH` is unset or the 
 6. Update the relevant guide in the same change. If report fields/statuses change, update contract tests and [format documentation](report-format.md).
 7. Before distributing a snapshot, include the full runtime file list and template, exclude reports/test artifacts, and retain the previous known-good snapshot for rollback. No deployment is implied by a local change.
 
-Do not add a new framework, documentation generator, CI pipeline or release process merely to document this small project. These can be introduced when an actual maintenance requirement exists. Source is maintained in [novakin/Server-Audit](https://github.com/novakin/Server-Audit); automated CI and release tagging are not configured. Before committing, review the staged file list and diff. Keep actual host reports, local lab files and scanner binaries out of this public repository; ignore rules cannot cover every custom output path.
+Do not add a new framework, documentation generator, CI pipeline or release process merely to document this small project. These can be introduced when an actual maintenance requirement exists. Source is maintained in [novakin/Server-Audit](https://github.com/novakin/Server-Audit); automated CI and release tagging are not configured. Before committing, review the staged file list and diff. Keep actual host reports, local lab files and scanner binaries out of the source repository; ignore rules cannot cover every custom output path.
 
 ## Documentation maintenance
 
 README is the entry point. Operations owns setup and handling; audit reference owns detection scope; architecture owns extension rules; report format owns status semantics; this guide owns test workflow. Link to the owning page instead of repeating detailed facts. Update the reviewed date when behavior is checked against source. Keep historical verification labeled by date and avoid presenting test totals as permanent guarantees.
 
 ## Recorded verification — 2026-09-17
+
+Historical runs preceding the reliability/SSH fix validation above follow. Their environments, counts and remaining gaps describe those runs, not new validation of the current change.
 
 External-verification follow-up: discovery now includes 87 tests. Ubuntu WSL passed 83 with four separately gated live-lab checks skipped; Windows passed 62 with 25 skips. Fifteen new external-workflow tests use loopback sockets or mocked public endpoints. Native IPv6 loopback passed on Ubuntu; Windows denied the control connection with WSAEACCES, so that integration test was explicitly skipped. No external addresses were scanned for implementation validation. Live-lab results remain the separate dated run below.
 
