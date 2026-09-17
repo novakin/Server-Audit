@@ -4,6 +4,13 @@
 
 This is an internal, read-only Ubuntu/Debian host audit using Python's standard library and available native tools. Read [README.md](README.md), then the relevant guide before changing behavior. The audit collects evidence; it does not certify security, prove external reachability or issue malware verdicts.
 
+## External-tool approval
+
+- Do not add, install, download, vendor, invoke or integrate a new external tool, scanner, third-party Python package or remote service into this project without explicit user approval **before implementation**. Explain the exact dependency, purpose, alternatives, data access and maintenance implications first. An opt-in flag is not approval, and a feature request does not implicitly approve a dependency.
+- Existing native host tools documented in the operator runbook remain in scope for their existing purposes. This rule does not authorize removing unrelated integrations. A new tool or materially expanded use requires approval.
+- The approved direction for replacing Gitleaks is built-in Python detection with the local `git` executable used strictly as a repository storage reader. This approval does not extend to another scanner, network credential checks or a home-grown Git packfile parser. The runtime replacement is a separate change; this policy does not claim that replacement is already merged or deployed.
+- When implementing an approved replacement, update obsolete tool-specific instructions, tests and documentation together with its code. Prefer straightforward, readable code; avoid code golf and abstractions without a concrete need.
+
 ## Architecture and coding
 
 - Keep `audit.py` responsible for CLI/platform setup and output selection, `audit_runner.py` for explicit collection order, collectors for evidence and interpretation, and `reporting.py` for presentation/export. Renderers must not run checks or create a second set of policy findings.
