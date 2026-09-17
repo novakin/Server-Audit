@@ -32,7 +32,8 @@ for path in "$lab" "$results" "$marker" "$keys"; do
     [[ ! -e $path && ! -L $path ]] || { echo "Refusing existing lab resource: $path" >&2; exit 2; }
 done
 docker info >/dev/null
-[[ -z $(docker ps -aq) ]] || { echo 'Refusing a Docker daemon with existing containers.' >&2; exit 2; }
+containers=$(docker ps -aq)
+[[ -z $containers ]] || { echo 'Refusing a Docker daemon with existing containers.' >&2; exit 2; }
 if docker image inspect "$image" >/dev/null 2>&1; then
     echo 'Refusing an existing fixture image.' >&2
     exit 2
@@ -107,7 +108,8 @@ for tool in sshd ssh ssh-keygen busybox ss nft iptables iptables-save ip6tables-
 done
 busybox --list | grep -Fx httpd >/dev/null
 busybox --list | grep -Fx wget >/dev/null
-[[ -z $(ss -H -lnt '( sport = :22222 or sport = :18080 )') ]] || { echo 'Lab ports are already occupied.' >&2; exit 2; }
+listeners=$(ss -H -lnt '( sport = :22222 or sport = :18080 )')
+[[ -z $listeners ]] || { echo 'Lab ports are already occupied.' >&2; exit 2; }
 nft list ruleset >/dev/null
 iptables-save >/dev/null
 ip6tables-save >/dev/null
@@ -121,6 +123,7 @@ mkdir "$results"; created_results=1
 if [[ ! -d /run/sshd ]]; then mkdir -m 755 /run/sshd; created_run_sshd=1; fi
 ssh-keygen -q -t ed25519 -N '' -f "$lab/host_key"
 ssh-keygen -q -t ed25519 -N '' -f "$lab/client_key"
+chmod 600 "$lab/host_key" "$lab/client_key"
 cp "$lab/client_key.pub" "$keys"
 chmod 600 "$keys"
 printf '[127.0.0.1]:22222 %s\n' "$(cat "$lab/host_key.pub")" > "$lab/known_hosts"
