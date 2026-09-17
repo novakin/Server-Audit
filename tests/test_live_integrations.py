@@ -1,4 +1,4 @@
-"""Opt-in checks for the disposable Debian lab; never configure the target host."""
+"""Opt-in checks for a disposable Ubuntu/Debian lab; never configure the target host."""
 
 import json
 import os
@@ -13,7 +13,7 @@ from server_audit.collectors import network_audit
 from server_audit.collectors import ssh_audit
 
 
-@unittest.skipUnless(os.environ.get('AUDIT_LIVE_INTEGRATION') == '1', 'Requires explicitly prepared disposable Debian lab')
+@unittest.skipUnless(os.environ.get('AUDIT_LIVE_INTEGRATION') == '1', 'Requires explicitly prepared disposable Ubuntu/Debian integration lab')
 class LiveIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
