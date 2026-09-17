@@ -1,0 +1,19 @@
+# Local evidence, tools and disposable environments
+.artifacts/
+/audits/
+/verified-audits/
+/audit-report.json
+/report.json
+/probe-*.json
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local secrets; never commit actual audit inputs or credentials
+.env
+.env.*
+*.pem
+*.key

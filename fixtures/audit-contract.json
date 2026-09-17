@@ -1,0 +1,244 @@
+{
+  "report": {
+    "schema_version": 1,
+    "timestamp_utc": "2026-09-17T00:00:00+00:00",
+    "host": "fixture-host",
+    "findings": [
+      {
+        "level": "UNKNOWN",
+        "message": "Not running as root: SSH configuration, firewall and process ownership checks may be incomplete."
+      },
+      {
+        "level": "REVIEW",
+        "message": "SSH permitrootlogin=yes. Prefer a named administrator with sudo; verify access before disabling root login."
+      },
+      {
+        "level": "REVIEW",
+        "message": "SSH passwordauthentication=yes. Prefer SSH keys; verify key access before disabling passwords."
+      },
+      {
+        "level": "REVIEW",
+        "message": "SSH keyboard-interactive authentication enabled; inspect PAM/MFA policy before changing it."
+      },
+      {
+        "level": "REVIEW",
+        "message": "1 non-loopback TCP/UDP sockets. Confirm each service is needed and restricted by firewall where appropriate."
+      },
+      {
+        "level": "REVIEW",
+        "message": "System reports a reboot is required."
+      },
+      {
+        "level": "UNKNOWN",
+        "message": "Fixture environment coverage incomplete."
+      },
+      {
+        "level": "UNKNOWN",
+        "message": "nftables: Permission denied"
+      },
+      {
+        "level": "UNKNOWN",
+        "message": "apt_metadata: No package indexes found."
+      },
+      {
+        "level": "UNKNOWN",
+        "message": "accounts: Fixture account access denied"
+      },
+      {
+        "level": "REVIEW",
+        "message": "Firewall evidence available from iptables_ipv4. Review input and forwarding chains for both IP families; rule presence does not prove protection."
+      },
+      {
+        "level": "REVIEW",
+        "message": "Readable firewall backends returned no rules. Verify host and provider filtering; uninspected backends may still contain rules."
+      },
+      {
+        "level": "REVIEW",
+        "message": "1 package updates available in cached APT metadata. Review and apply relevant updates; security classification is not established."
+      },
+      {
+        "level": "REVIEW",
+        "message": "Failed services: web.service"
+      }
+    ],
+    "checks": {
+      "os": {
+        "status": "ok",
+        "output": "ID=debian\nVERSION_ID=12\n"
+      },
+      "ssh": {
+        "status": "ok",
+        "exit_code": 0,
+        "output": "permitrootlogin yes\npasswordauthentication yes\nkbdinteractiveauthentication yes",
+        "detail": "",
+        "selected_settings": {
+          "permitrootlogin": "yes",
+          "passwordauthentication": "yes",
+          "kbdinteractiveauthentication": "yes"
+        }
+      },
+      "ports": {
+        "status": "ok",
+        "exit_code": 0,
+        "output": "tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=20,fd=3))",
+        "detail": "",
+        "listeners": [
+          {
+            "protocol": "tcp",
+            "address": "0.0.0.0:22",
+            "binding": "non-loopback (reachability unverified)",
+            "process": "users:((\"sshd\",pid=20,fd=3))"
+          }
+        ]
+      },
+      "ufw": {
+        "status": "unavailable",
+        "detail": "Command not installed: ufw"
+      },
+      "nftables": {
+        "status": "error",
+        "exit_code": 1,
+        "output": "",
+        "detail": "Permission denied"
+      },
+      "iptables_ipv4": {
+        "status": "ok",
+        "exit_code": 0,
+        "output": "",
+        "detail": ""
+      },
+      "iptables_ipv6": {
+        "status": "unavailable",
+        "detail": "Command not installed: ip6tables-save"
+      },
+      "running_services": {
+        "status": "ok",
+        "exit_code": 0,
+        "output": "ssh.service loaded active running SSH",
+        "detail": ""
+      },
+      "failed_services": {
+        "status": "ok",
+        "exit_code": 0,
+        "output": "web.service loaded failed failed Web",
+        "detail": "",
+        "units": [
+          "web.service"
+        ]
+      },
+      "available_updates": {
+        "status": "ok",
+        "exit_code": 0,
+        "output": "Listing...\nopenssl/stable 3.0 amd64 [upgradable from: 2.0]",
+        "detail": "",
+        "packages": [
+          "openssl"
+        ]
+      },
+      "docker": {
+        "status": "unavailable",
+        "detail": "Command not installed: docker"
+      },
+      "apt_metadata": {
+        "status": "unavailable",
+        "output": "No package indexes found."
+      },
+      "reboot_required": {
+        "status": "ok",
+        "output": "True"
+      },
+      "accounts": {
+        "status": "error",
+        "detail": "Fixture account access denied"
+      },
+      "environment_files": {
+        "status": "partial",
+        "files": []
+      },
+      "git_secrets": {
+        "status": "not_requested",
+        "repositories": [],
+        "limitations": [
+          "Only explicitly selected local repositories are scanned. No remote clone, fetch, GitHub search or credential validation is performed.",
+          "Gitleaks reads repository content. History covers locally available reachable refs; shallow clones, deleted/unreachable objects, LFS content, submodules and remote-only branches require separate coverage.",
+          "Working-directory scanning includes files supported by Gitleaks. Scanner defaults govern archives/encoding/symlinks. Ignored findings in custom repo config are not honored; built-in rule allowlists still apply.",
+          "Findings are candidates, not verified live credentials. Raw secrets, matching text and commit messages are excluded; file paths and commit IDs remain operational metadata.",
+          "Each mode has a 110-second scanner timeout and a 120-second process deadline. Failed scans are unknown, never clean. No automatic remediation or history rewriting occurs."
+        ]
+      }
+    },
+    "limitations": [
+      "No external scan: bindings and firewall rules do not prove internet reachability. Check provider firewalls, NAT, IPv4 and IPv6 from an independent host.",
+      "SSH settings describe the installed default configuration, not necessarily the running daemon or a custom service configuration. Match rules require --ssh-context.",
+      "Port inventory covers the current network namespace. Docker published ports are listed separately; other container runtimes and namespaces are not covered.",
+      "Package results use existing APT metadata; this script does not refresh it or classify every update as a security update.",
+      "This is a configuration inventory and focused audit, not vulnerability scanning or proof that the server is secure."
+    ],
+    "summary": {
+      "REVIEW": 9,
+      "UNKNOWN": 5
+    }
+  },
+  "commands": [
+    [
+      "sshd",
+      "-T",
+      "-f",
+      "/etc/ssh/custom.conf",
+      "-C",
+      "user=alice,addr=192.0.2.1"
+    ],
+    [
+      "ss",
+      "-H",
+      "-lntup"
+    ],
+    [
+      "ufw",
+      "status",
+      "verbose"
+    ],
+    [
+      "nft",
+      "list",
+      "ruleset"
+    ],
+    [
+      "iptables-save"
+    ],
+    [
+      "ip6tables-save"
+    ],
+    [
+      "systemctl",
+      "list-units",
+      "--type=service",
+      "--state=running",
+      "--no-pager",
+      "--plain"
+    ],
+    [
+      "systemctl",
+      "list-units",
+      "--type=service",
+      "--state=failed",
+      "--no-legend",
+      "--no-pager",
+      "--plain"
+    ],
+    [
+      "apt",
+      "list",
+      "--upgradable"
+    ],
+    [
+      "docker",
+      "--host",
+      "unix:///var/run/docker.sock",
+      "ps",
+      "--all",
+      "--quiet",
+      "--no-trunc"
+    ]
+  ]
+}
