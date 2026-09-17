@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,16 @@ from server_audit.collectors import git_reader
 
 
 class ReaderUnitTests(unittest.TestCase):
+
+    def test_truncated_protocol_or_empty_records_are_rejected_without_payloads(self):
+        for data in (b'PRIVATE_DIAGNOSTIC', b'\0', b'core.repositoryformatversion\n0\0\0'):
+            with self.subTest(data=data), git_reader.repository_view() as view:
+                with patch.object(git_reader, 'GitProcess') as factory:
+                    factory.return_value.__enter__.return_value.all.return_value = data
+                    with self.assertRaises(git_reader.GitReadError) as caught:
+                        git_reader.object_format('fixture-git', view, view / 'config', time.monotonic() + 5)
+                self.assertNotIn('PRIVATE_DIAGNOSTIC', str(caught.exception))
+
     def test_environment_is_allowlisted_and_disables_network_and_overrides(self):
         injected = {'GIT_TRACE': '/fixture/trace', 'GIT_SSH_COMMAND': 'PRIVATE_SENTINEL',
                     'GIT_CONFIG_COUNT': '1', 'LD_PRELOAD': '/fixture/lib.so'}
@@ -158,6 +169,7 @@ class ReaderUnitTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == 'posix', 'POSIX pipe/process integration')
 class ReaderProcessTests(unittest.TestCase):
+
     def reader(self, code, seconds=5):
         return git_reader.GitProcess([sys.executable, '-c', code], {}, '.', time.monotonic() + seconds)
 
@@ -356,6 +368,23 @@ finally:
                     if parent.poll() is None:
                         parent.kill()
                     parent.communicate(timeout=5)
+
+
+@unittest.skipUnless(os.name == 'posix' and shutil.which('git'), 'Requires local Git and POSIX pipes')
+class NativeConfigurationTests(unittest.TestCase):
+
+    def test_supported_boolean_spellings_are_accepted_by_the_reader(self):
+        spellings = (None, '', 'true', 'false', 'TRUE', 'yes', 'no', 'on', 'off', '0', '1', '2', '-1')
+        with tempfile.TemporaryDirectory() as folder:
+            config = Path(folder) / 'config'
+            for value in spellings:
+                with self.subTest(value=value), git_reader.repository_view() as view:
+                    setting = 'worktreeConfig' if value is None else 'worktreeConfig = ' + value
+                    config.write_text('[core]\nrepositoryformatversion = 0\n[extensions]\n' + setting + '\n')
+                    original = config.read_bytes()
+                    result = git_reader.object_format(shutil.which('git'), view, config, time.monotonic() + 5)
+                    self.assertEqual(result, ('sha1', False))
+                    self.assertEqual(config.read_bytes(), original)
 
 
 if __name__ == '__main__':
