@@ -1,79 +1,268 @@
-# Server security audit
+<a name="top"></a>
 
-Internal, read-only Ubuntu/Debian host audit. Collects configuration, access and exposure evidence with Python 3 and available native tools. Produces text, JSON and an offline HTML report. Findings require review; this is not a security certification or malware scanner.
+<div align="center">
 
-The audit does not install tools, refresh APT, change host configuration or scan remote hosts. Export writes private local files; requested Git scanning creates private reader metadata, never copies inspected content. Inspection can create normal system log records.
+# 🛡️ Server Audit
 
-An explicit [external-verification companion](docs/external-verification.md) can probe selected TCP endpoints from an independent machine, then import observations into a new report. It runs separately from host collection and never discovers targets automatically.
+**Review server access, services and exposure in one report.**
 
-## Start here
+Read-only checks for Ubuntu and Debian. Offline reports. No automatic fixes.
 
-Copy `audit.py`, `external_probe.py` and the complete `server_audit/` directory into a clean, trusted directory on the target server. Preserve subdirectories, including `server_audit/templates/`, and exclude caches. No pip install or import-path configuration is needed. See the [runtime copy instructions](docs/operations.md#prerequisites-and-installation), then run:
+![Target: Ubuntu / Debian](https://img.shields.io/badge/Target-Ubuntu%20%2F%20Debian-5E81AC?style=flat-square)
+![Runtime: Python 3](https://img.shields.io/badge/Runtime-Python%203-3776AB?style=flat-square&logo=python&logoColor=white)
+![Reports: HTML / JSON / Text](https://img.shields.io/badge/Reports-HTML%20%2F%20JSON%20%2F%20Text-4C956C?style=flat-square)
+
+[**Get started**](#get-started) · [Checks](#what-it-checks) · [Examples](#usage-examples) · [Reports](#understanding-your-report) · [Help](#faq-and-troubleshooting) · [Documentation](#documentation)
+
+</div>
+
+<!-- Optional visual: add one real HTML-report screenshot generated from synthetic
+     data here, using a relative repository path after the image exists. Show the
+     summary, coverage and an evidence section. Do not use production reports. -->
+
+---
+
+Server Audit gathers local configuration, account access and service evidence into an offline report. Use it for a server handover, a routine review, or a record before and after an approved change.
+
+**Run on the server → Export the report → Review in your browser.**
+
+<a name="what-it-checks"></a>
+
+## 🔎 What it checks
+
+| Area | What you can review |
+| --- | --- |
+| **SSH and accounts** | Authentication settings, sudo policy, authorized-key fingerprints, file permissions and retained login evidence. |
+| **Ports and firewalls** | Listening TCP/UDP sockets, addresses, owning processes and available firewall rules. |
+| **Docker** | Container health, published ports, mounts, configured privileges and resource limits on the local default Docker socket. |
+| **System health** | Running and failed services, updates from cached APT metadata, and reboot-required state. |
+| **Environment files** | Ownership and permissions of discovered files and supported application references—not environment-variable values. |
+| **Scheduled tasks** | Cron jobs, systemd timers, permissions and command patterns that need review. |
+| **Git secrets · opt-in** | Candidate credentials in selected local Git configuration and stored objects. **Not current working files.** |
+
+Checks depend on available tools, permissions and scope. Review coverage notes alongside findings; no detections does not prove absence. See [full coverage and limits](docs/audit-reference.md).
+
+<a name="get-started"></a>
+
+## 🚀 Get started
+
+You need an authorized Ubuntu/Debian host, Python 3 and a reviewed copy of the project. Root access improves coverage; it is not mandatory. There is no `pip install` step, and missing native tools are not installed automatically.
+
+Check [prerequisites and tested environments](docs/operations.md#prerequisites-and-installation) before your first run. Ubuntu/Debian are the target platforms, not a claim that every version has been validated.
+
+### 1. Copy the runtime
+
+Copy these items from one reviewed revision into a clean, trusted directory, such as `/opt/server-audit/`:
+
+```text
+audit.py
+external_probe.py
+server_audit/          # Include all subdirectories and the HTML template
+```
+
+Keep the directory structure; exclude caches. Tests are not required. When running with `sudo`, untrusted users must not be able to modify the runtime files or directory.
+
+### 2. Generate your first report
+
+From that directory:
 
 ```bash
+python3 --version
 python3 audit.py --help
 sudo python3 audit.py --export /var/lib/server-security-audit
 ```
 
-Open the generated `report.html`; retain its sibling `data/report.json` and completion manifest. Root improves visibility. A zero exit code means report generation completed, not that all checks passed. Reports contain sensitive internal operational details.
+The command creates a new bundle and prints the path to `report.html`.
 
-## Repository layout
+### 3. Open and review
+
+Check that `manifest.json` contains `"status": "complete"`, then open `report.html`. For a headless server, securely transfer the complete bundle to your workstation.
+
+Review **Unknown** findings and coverage gaps first, then the evidence behind **Review** findings.
+
+> [!IMPORTANT]
+> **Keep reports private.** They contain sensitive accounts, addresses, paths and configuration evidence. Do not commit them to Git or publish them in a web directory.
+
+<a name="usage-examples"></a>
+
+## 🧰 Usage examples
+
+### Terminal output or an offline bundle
+
+```bash
+# Read the results in your terminal
+sudo python3 audit.py
+
+# Save an HTML/JSON bundle under ./audits
+sudo python3 audit.py --export ./audits
+```
+
+Relative paths use your current directory. Use absolute paths for scheduled runs.
+
+### Add Git secret inspection
+
+```bash
+sudo python3 audit.py \
+  --git-root /srv/app \
+  --git-root /opt/another-repo \
+  --git-scan-seconds 60 \
+  --export ./audits
+```
+
+This requires local Git and inspects only the repositories you select. It does not clone, fetch or validate credentials remotely. The default scan budget is 60 seconds per repository; limits can leave partial coverage.
+
+> [!NOTE]
+> **Git inspection is opt-in and does not scan current working files.** Findings identify candidate locations without exporting matching secret values. See [Git scope and limits](docs/audit-reference.md#git-secrets).
+
+<details>
+<summary><strong>Choose environment-file discovery directories</strong></summary>
+
+```bash
+sudo python3 audit.py \
+  --env-root /srv/apps \
+  --env-root /opt/services \
+  --export ./audits
+```
+
+These options replace default directory-discovery roots, not the separate inspection of supported application references. This check reads file metadata, not file contents.
+
+</details>
+
+<details>
+<summary><strong>Evaluate SSH settings for a specific connection</strong></summary>
+
+```bash
+sudo python3 audit.py \
+  --ssh-context 'user=alice,addr=198.51.100.10,host=client.example' \
+  --export ./audits
+```
+
+Replace the example connection details. This evaluates on-disk configuration, not necessarily the running daemon's settings. Add `--ssh-config /path/to/sshd_config` for a custom configuration file.
+
+</details>
+
+<details>
+<summary><strong>Use JSON for automation</strong></summary>
+
+```bash
+# Print structured results
+sudo python3 audit.py --json
+
+# Save stdout with restrictive permissions
+(umask 077; sudo python3 audit.py --json > audit-report.json)
+```
+
+The shell creates redirected files, so `sudo` alone does not make them private. Prefer export bundles for retained audits; see the [report format](docs/report-format.md) for integration.
+
+</details>
+
+<a name="understanding-your-report"></a>
+
+## 📊 Understanding your report
 
 ```text
-Server-Audit/
-├── audit.py                 # Host-audit launcher
-├── external_probe.py        # External-companion launcher
-├── server_audit/            # Runtime package, including CLI and reporting
-│   ├── collectors/          # Audit checks and their domain-specific helpers
-│   └── templates/           # Offline HTML template
-├── tests/                   # Test modules and shared helpers
-│   └── fixtures/            # Synthetic historical report contract
-├── docs/                    # Operator, architecture and verification guides
-├── README.md
-├── AGENTS.md
-├── .gitignore
-└── .gitattributes
+<unique-audit-folder>/
+├── report.html        # Offline browser report
+├── data/
+│   └── report.json    # Full structured evidence
+└── manifest.json      # Export-completion record
 ```
 
-From the repository root, run tests with:
+The HTML report includes search, finding filters, coverage and expandable evidence, with light/dark browser preferences and print support. It needs no hosted dashboard or CDN. Keep the bundle together to preserve its JSON download link and completion record.
 
-```bash
-python3 -m unittest discover -s tests -t . -p 'test_*.py' -v
-```
+| Finding | What it means | Your next step |
+| --- | --- | --- |
+| **Review** | An observed setting or condition needs a decision—not proof of compromise. | Inspect the evidence and decide whether a change is needed. |
+| **Unknown** | Evidence is missing or insufficient. | Check the reason, address the coverage gap where possible, and reassess. |
 
-The launch commands and report formats are unchanged. Internal imports now use `server_audit`; see the [layout decision](docs/architecture.md#decision-runtime-package-and-test-layout). Generated reports are restricted evidence, not source files.
+**Successful collection is not a security pass.** Exit code `0` means generation finished, and a complete manifest means export finished. Neither certifies the host or guarantees full coverage. There is no security score.
 
-## Documentation
+<details>
+<summary><strong>What do the collection statuses mean?</strong></summary>
 
-Coding agents must follow the active [project instructions](AGENTS.md), including explicit user approval before adding an external-tool integration.
-
-| Guide | Use it for |
+| Status | Meaning |
 | --- | --- |
-| [Roadmap](docs/roadmap.md) | Approved fix scope, proposed next work and architecture decision triggers |
-| [Operator runbook](docs/operations.md) | Prerequisites, CLI, running audits, exports, retention and troubleshooting |
-| [Audit coverage and limits](docs/audit-reference.md) | SSH, accounts/keys, network/firewalls, Docker, environment files, Git secrets and scheduled tasks |
-| [Architecture and extension guide](docs/architecture.md) | Module ownership, data flow, collector contract and adding audits |
-| [Report format](docs/report-format.md) | JSON fields, status semantics, completion manifest and compatibility |
-| [Development and verification](docs/development.md) | Test workflow, change checklist and recorded validation |
-| [Debian live validation](docs/live-validation.md) | Native SSH/Docker/firewall results, regression fixes and remaining gaps |
-| [External verification](docs/external-verification.md) | Independent TCP probe, dry run, offline import, exposure labels and limits |
+| `ok` | Collection succeeded in its stated scope; findings or nested failures can still exist. |
+| `skipped` | An optional prerequisite was missing; the reason is recorded. |
+| `not_requested` | An opt-in check was not selected. |
+| `partial` | Some evidence was collected, but coverage is incomplete. |
+| `unavailable` / `error` | Required evidence was unavailable, or collection failed. |
 
-## Detection and interpretation
+Read findings and nested statuses too. See the [full status definitions](docs/report-format.md#check-statuses).
 
-Missing optional Docker/firewall tools are **Skipped** with a reason; no missing executable is launched. Access errors and incomplete required evidence remain **Unknown** findings. Built-in Git secret detection runs only for explicit `--git-root` selections. It inspects local `.git` configuration and stored objects, not current working files. Git is used only to read its storage format; Gitleaks is not required. An empty successful inventory is different from unavailable coverage.
+</details>
 
-For a selected local repository (60-second default budget):
+<a name="external-verification--optional"></a>
 
-```bash
-sudo python3 audit.py --git-root /srv/app --git-scan-seconds 60 --export ./audits
-```
+## 🌐 External verification · optional
 
-See [Git scope and limits](docs/audit-reference.md#git-secrets). No detection does not prove absence.
+A local listening port does not prove internet reachability. The separate `external_probe.py` companion can test explicitly selected TCP endpoints from an independent machine and import observations into a new report.
 
-See [status definitions](docs/report-format.md#check-statuses) and [audit scope](docs/audit-reference.md) before acting on results. The script never applies remediation.
+It never runs automatically with the host audit and requires Python 3.9 or newer. Use only authorized targets; a negative observation applies to that probe and time, not all possible network paths.
 
-## Project state
+**[Follow the external-verification guide →](docs/external-verification.md)**
 
-Source repository: [novakin/Server-Audit](https://github.com/novakin/Server-Audit). Generated audit reports remain restricted internal evidence and must not be committed, regardless of source repository visibility. No CI pipeline or release process is configured. Current layout verification and disclosed skips are recorded in the [verification summary](docs/development.md#package-layout-verification--2026-09-17); earlier Git validation remains separately dated. Ubuntu WSL validation is recorded in the [development guide](docs/development.md#recorded-verification--2026-09-17). Debian 13 and real SSH/Docker/firewall integrations passed in an [isolated lab](docs/live-validation.md). Standalone systemd-host behavior and external exposure remain unverified. No maintainer contact, retention duration or support SLA is assigned here; use the existing internal ownership and incident process.
+<a name="safety-and-limitations"></a>
 
-Documentation reviewed against the current source on 2026-09-17. Keep source, tests and these guides aligned when behavior changes.
+## 🔒 Safety and privacy
+
+**You control remediation.** The audit does not install tools, refresh APT, change configuration or permissions, restart services or scan remote hosts. External probing is a separate workflow.
+
+**Read-only is not zero activity.** Exports write reports, requested Git scans create private reader metadata, and inspection can produce system log records. Retain and transfer evidence through your normal restricted-access process.
+
+**Treat results as evidence, not certification.** This is not malware scanning, image-vulnerability scanning or exhaustive secret detection. Cached metadata, access restrictions and scan limits can leave gaps. Review the [scope limitations](docs/audit-reference.md), apply changes separately, then rerun.
+
+<a name="faq-and-troubleshooting"></a>
+
+## ❓ FAQ and troubleshooting
+
+<details>
+<summary><strong>Can I run this from Windows?</strong></summary>
+
+Run `audit.py` on the target Ubuntu/Debian server. Open the exported HTML on your workstation. The optional companion is separate; it does not run the host audit remotely.
+
+</details>
+
+<details>
+<summary><strong>Why is Docker or a firewall check skipped?</strong></summary>
+
+The optional tool may be absent from the audit's system PATH. That does not prove Docker or firewall protection is absent. Permission failures and unreadable kernel-firewall evidence require review; see [troubleshooting](docs/operations.md#troubleshooting).
+
+</details>
+
+<details>
+<summary><strong>There is no completion manifest. Can I use the report?</strong></summary>
+
+Treat the bundle as incomplete. Check the export error and storage permissions, retain partial files for diagnosis, and rerun into a new bundle after resolving the issue.
+
+</details>
+
+<details>
+<summary><strong>How do I upgrade?</strong></summary>
+
+Copy a complete reviewed revision into a new, clean directory. Do not mix revisions or overlay the package onto obsolete flat modules. Keep the previous revision for rollback. See the [runtime copy instructions](docs/operations.md#prerequisites-and-installation).
+
+</details>
+
+For help, provide your OS and Python versions, project revision, command and sanitized error—not raw credentials or a full audit bundle. More cases are covered in the [operator runbook](docs/operations.md#troubleshooting).
+
+<a name="documentation"></a>
+
+## 📚 Documentation
+
+| I need to… | Read this |
+| --- | --- |
+| Run, export, transfer or troubleshoot an audit | [Operator runbook](docs/operations.md) |
+| Understand coverage and limitations | [Audit reference](docs/audit-reference.md) |
+| Test endpoints from another network | [External verification](docs/external-verification.md) |
+| Integrate JSON results | [Report format and statuses](docs/report-format.md) |
+| Check tested environments and known gaps | [Verification](docs/development.md) · [Debian lab](docs/live-validation.md) |
+
+<details>
+<summary><strong>For contributors</strong></summary>
+
+See the [architecture guide](docs/architecture.md), [development workflow](docs/development.md), [roadmap](docs/roadmap.md) and [project instructions](AGENTS.md).
+
+</details>
+
+<p align="right"><a href="#top">Back to top ↑</a></p>
