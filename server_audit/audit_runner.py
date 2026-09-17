@@ -4,15 +4,15 @@ import datetime
 import os
 import platform
 
-import network_audit
-import ssh_audit
-import system_audit
-from accounts import collect as collect_accounts
-from command_runner import run
-from docker_audit import collect as collect_docker
-from env_files import collect as collect_env_files
-from git_secrets import SCAN_SECONDS, collect as collect_git_secrets
-from scheduled_tasks import collect as collect_scheduled_tasks
+from server_audit.collectors import network_audit
+from server_audit.collectors import ssh_audit
+from server_audit.collectors import system_audit
+from server_audit.collectors.accounts import collect as collect_accounts
+from server_audit.command_runner import run
+from server_audit.collectors.docker_audit import collect as collect_docker
+from server_audit.collectors.env_files import collect as collect_env_files
+from server_audit.collectors.git_secrets import SCAN_SECONDS, collect as collect_git_secrets
+from server_audit.collectors.scheduled_tasks import collect as collect_scheduled_tasks
 
 
 def summarize(checks):

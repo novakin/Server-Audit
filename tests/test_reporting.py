@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import audit
-import reporting
+from server_audit import cli as audit
+from server_audit import reporting
 
 
 def sample_report():
@@ -96,7 +96,7 @@ class ReportingTests(unittest.TestCase):
             if path.name == 'report.html':
                 raise OSError('simulated disk full')
             native_write(path, content)
-        with tempfile.TemporaryDirectory() as temp, patch('reporting.private_write', side_effect=failing_write):
+        with tempfile.TemporaryDirectory() as temp, patch('server_audit.reporting.private_write', side_effect=failing_write):
             with self.assertRaisesRegex(OSError, 'Export incomplete'):
                 reporting.export_report(sample_report(), temp)
             folders = list(Path(temp).iterdir())
@@ -132,14 +132,14 @@ class ReportingTests(unittest.TestCase):
             native_write(path, content)
             if path.name == '.manifest.pending':
                 raise OSError('simulated flush failure')
-        with tempfile.TemporaryDirectory() as temp, patch('reporting.private_write', side_effect=failing_write):
+        with tempfile.TemporaryDirectory() as temp, patch('server_audit.reporting.private_write', side_effect=failing_write):
             with self.assertRaises(OSError):
                 reporting.export_report(sample_report(), temp)
             folder = next(Path(temp).iterdir())
             self.assertFalse((folder / 'manifest.json').exists())
 
     def test_export_failure_returns_nonzero_without_success_message(self):
-        with patch('sys.argv', ['audit.py', '--export']), patch('audit.platform.system', return_value='Linux'), patch('audit.audit', return_value=sample_report()), patch('audit.export_report', side_effect=OSError('disk full')), patch.dict(os.environ):
+        with patch('sys.argv', ['audit.py', '--export']), patch('server_audit.cli.platform.system', return_value='Linux'), patch('server_audit.cli.audit', return_value=sample_report()), patch('server_audit.cli.export_report', side_effect=OSError('disk full')), patch.dict(os.environ):
             stdout, stderr = io.StringIO(), io.StringIO()
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 result = audit.main()
@@ -149,7 +149,7 @@ class ReportingTests(unittest.TestCase):
             self.assertNotIn('Audit exported:', stderr.getvalue())
 
     def test_cli_export_does_not_pollute_json_stdout(self):
-        with tempfile.TemporaryDirectory() as temp, patch('sys.argv', ['audit.py', '--json', '--export', temp]), patch('audit.platform.system', return_value='Linux'), patch('audit.audit', return_value=sample_report()), patch.dict(os.environ):
+        with tempfile.TemporaryDirectory() as temp, patch('sys.argv', ['audit.py', '--json', '--export', temp]), patch('server_audit.cli.platform.system', return_value='Linux'), patch('server_audit.cli.audit', return_value=sample_report()), patch.dict(os.environ):
             stdout, stderr = io.StringIO(), io.StringIO()
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 result = audit.main()

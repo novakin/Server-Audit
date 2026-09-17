@@ -6,11 +6,11 @@ from pathlib import Path
 import unittest
 import urllib.request
 
-import accounts
-from command_runner import run
-import docker_audit
-import network_audit
-import ssh_audit
+from server_audit.collectors import accounts
+from server_audit.command_runner import run
+from server_audit.collectors import docker_audit
+from server_audit.collectors import network_audit
+from server_audit.collectors import ssh_audit
 
 
 @unittest.skipUnless(os.environ.get('AUDIT_LIVE_INTEGRATION') == '1', 'Requires explicitly prepared disposable Debian lab')

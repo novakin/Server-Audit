@@ -141,7 +141,7 @@ def render_html(report):
     ], 'No external probe results imported. Internet exposure remains unknown.', badge_columns=(2,))
     for check in checks.values():
         limitations.extend(check.get("limitations", []))
-    template = Template(Path(__file__).with_name("report_template.html").read_text(encoding="utf-8"))
+    template = Template(Path(__file__).with_name("templates").joinpath("report_template.html").read_text(encoding="utf-8"))
     return template.substitute(
         host=escape(report.get("host", "Unknown host")), timestamp=display_timestamp,
         review=review, unknown=unknown, collected=collected, total=len(checks), findings_count=len(findings),

@@ -8,9 +8,41 @@ Run an audit on an authorized Ubuntu/Debian host, retain its evidence privately,
 
 The runtime uses Python 3 and its standard library. There is no pip requirements file or automatic dependency installer. Ubuntu WSL and Debian 13 userland in an isolated WSL2 lab have been exercised; standalone Debian systemd-host validation remains outstanding. See [live validation](live-validation.md) for tested versions and limits. A minimum host-audit Python version has not been established by a compatibility test matrix. The separate [external companion](external-verification.md#cli-and-automation) requires Python 3.9 or newer. Record `python3 --version` for the environment being assessed.
 
-Copy every runtime file in the [architecture table](architecture.md#architecture-and-extending-audits), including `git_reader.py` and `report_template.html`, into one trusted directory on the server. Do not copy `.artifacts`, collected reports, cached bytecode or local scanner test binaries. Keep source and template from the same reviewed revision or source snapshot. The script directory and native tool directories must not be writable by untrusted users when running as root.
+Copy the following from one reviewed revision into a **new, clean, trusted directory**:
 
-Run from that directory. Root improves coverage; unprivileged runs are allowed but record incomplete visibility. The CLI checks for Linux, not for a specific distribution. Do not interpret a successful launch on another Linux distribution as supported behavior.
+```text
+audit.py
+external_probe.py
+server_audit/
+    __init__.py
+    cli.py
+    audit_runner.py
+    command_runner.py
+    reporting.py
+    external_probe.py
+    external_verification.py
+    collectors/
+        __init__.py
+        accounts.py
+        ssh_audit.py
+        network_audit.py
+        system_audit.py
+        docker_audit.py
+        env_files.py
+        scheduled_tasks.py
+        git_secrets.py
+        git_reader.py
+    templates/
+        report_template.html
+```
+
+The [architecture table](architecture.md#architecture-and-extending-audits) lists module ownership. Exclude `tests/`, test fixtures, `.git`, `.artifacts`, collected reports, local lab files and cached bytecode (`__pycache__`, `*.pyc`). Documentation may be retained separately for operators but is not needed at runtime. Do not flatten the package or copy only its Python files without the template. No `pip install`, `PYTHONPATH` or `sys.path` changes are required.
+
+For an upgrade from the old flat layout, use a clean directory rather than overlaying the old root modules. Keep the previous complete revision for rollback; do not mix revisions. Only the root launchers are supported script entry points. Internal imports now use `server_audit.*`; old root-module imports are not preserved.
+
+Run from that directory or give the launcher an absolute path, for example `python3 /opt/server-audit/audit.py --help`. Templates are resolved relative to the package, while user-supplied relative repository/configuration/export paths still resolve from the caller's current directory. The program does not change directories to fix imports. For scheduled invocations, use explicit absolute input and export paths.
+
+Root improves coverage; unprivileged runs are allowed but record incomplete visibility. The CLI checks for Linux, not for a specific distribution. Do not interpret a successful launch on another Linux distribution as supported behavior. The runtime directory, package files and native tool directories must not be writable by untrusted users when running as root.
 
 | Area | Native tools used |
 | --- | --- |

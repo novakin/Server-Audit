@@ -2,10 +2,10 @@ import json
 import unittest
 from unittest.mock import patch
 
-import docker_audit as docker
-import command_runner
-import audit_runner
-from reporting import docker_text_report
+from server_audit.collectors import docker_audit as docker
+from server_audit import command_runner
+from server_audit import audit_runner
+from server_audit.reporting import docker_text_report
 
 
 class DockerTests(unittest.TestCase):
@@ -48,7 +48,7 @@ class DockerTests(unittest.TestCase):
         self.assertIn('--all', calls[0])
 
     def test_missing_docker_skips_without_launching_process(self):
-        with patch('command_runner.shutil.which', return_value=None), patch('command_runner.subprocess.run') as process:
+        with patch('server_audit.command_runner.shutil.which', return_value=None), patch('server_audit.command_runner.subprocess.run') as process:
             report, findings = docker.collect(command_runner.run)
         process.assert_not_called()
         self.assertEqual(report['status'], 'skipped')

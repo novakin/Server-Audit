@@ -8,7 +8,7 @@ An explicit [external-verification companion](docs/external-verification.md) can
 
 ## Start here
 
-Copy the complete [runtime file set](docs/architecture.md#architecture-and-extending-audits) and template into one trusted directory on the target server, then run:
+Copy `audit.py`, `external_probe.py` and the complete `server_audit/` directory into a clean, trusted directory on the target server. Preserve subdirectories, including `server_audit/templates/`, and exclude caches. No pip install or import-path configuration is needed. See the [runtime copy instructions](docs/operations.md#prerequisites-and-installation), then run:
 
 ```bash
 python3 audit.py --help
@@ -16,6 +16,32 @@ sudo python3 audit.py --export /var/lib/server-security-audit
 ```
 
 Open the generated `report.html`; retain its sibling `data/report.json` and completion manifest. Root improves visibility. A zero exit code means report generation completed, not that all checks passed. Reports contain sensitive internal operational details.
+
+## Repository layout
+
+```text
+Server-Audit/
+├── audit.py                 # Host-audit launcher
+├── external_probe.py        # External-companion launcher
+├── server_audit/            # Runtime package, including CLI and reporting
+│   ├── collectors/          # Audit checks and their domain-specific helpers
+│   └── templates/           # Offline HTML template
+├── tests/                   # Test modules and shared helpers
+│   └── fixtures/            # Synthetic historical report contract
+├── docs/                    # Operator, architecture and verification guides
+├── README.md
+├── AGENTS.md
+├── .gitignore
+└── .gitattributes
+```
+
+From the repository root, run tests with:
+
+```bash
+python3 -m unittest discover -s tests -t . -p 'test_*.py' -v
+```
+
+The launch commands and report formats are unchanged. Internal imports now use `server_audit`; see the [layout decision](docs/architecture.md#decision-runtime-package-and-test-layout). Generated reports are restricted evidence, not source files.
 
 ## Documentation
 
@@ -48,6 +74,6 @@ See [status definitions](docs/report-format.md#check-statuses) and [audit scope]
 
 ## Project state
 
-Source repository: [novakin/Server-Audit](https://github.com/novakin/Server-Audit). Generated audit reports remain restricted internal evidence and must not be committed, regardless of source repository visibility. No CI pipeline or release process is configured. Current built-in Git tests and disclosed skips are recorded in the [verification summary](docs/development.md#built-in-local-git-inspection--2026-09-17). Ubuntu WSL validation is recorded in the [development guide](docs/development.md#recorded-verification--2026-09-17). Debian 13 and real SSH/Docker/firewall integrations passed in an [isolated lab](docs/live-validation.md). Standalone systemd-host behavior and external exposure remain unverified. No maintainer contact, retention duration or support SLA is assigned here; use the existing internal ownership and incident process.
+Source repository: [novakin/Server-Audit](https://github.com/novakin/Server-Audit). Generated audit reports remain restricted internal evidence and must not be committed, regardless of source repository visibility. No CI pipeline or release process is configured. Current layout verification and disclosed skips are recorded in the [verification summary](docs/development.md#package-layout-verification--2026-09-17); earlier Git validation remains separately dated. Ubuntu WSL validation is recorded in the [development guide](docs/development.md#recorded-verification--2026-09-17). Debian 13 and real SSH/Docker/firewall integrations passed in an [isolated lab](docs/live-validation.md). Standalone systemd-host behavior and external exposure remain unverified. No maintainer contact, retention duration or support SLA is assigned here; use the existing internal ownership and incident process.
 
 Documentation reviewed against the current source on 2026-09-17. Keep source, tests and these guides aligned when behavior changes.

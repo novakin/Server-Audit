@@ -11,12 +11,12 @@ import time
 import unittest
 from unittest.mock import patch
 
-import audit
-import audit_runner
-import git_reader
-import git_secrets
-import reporting
-from test_runner import fixture_report
+from server_audit import cli as audit
+from server_audit import audit_runner
+from server_audit.collectors import git_reader
+from server_audit.collectors import git_secrets
+from server_audit import reporting
+from tests.helpers import fixture_report
 
 
 class GitAuditTests(unittest.TestCase):
@@ -24,8 +24,8 @@ class GitAuditTests(unittest.TestCase):
         for arguments, expected in (([], 60), (['--git-scan-seconds', '12.5'], 12.5)):
             with self.subTest(arguments=arguments):
                 with patch('sys.argv', ['audit.py', '--git-root', '/fixture/repo', '--json', *arguments]), \
-                        patch('audit.platform.system', return_value='Linux'), \
-                        patch('audit.audit', return_value={}) as collect, patch.dict(os.environ), \
+                        patch('server_audit.cli.platform.system', return_value='Linux'), \
+                        patch('server_audit.cli.audit', return_value={}) as collect, patch.dict(os.environ), \
                         contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(audit.main(), 0)
                 collect.assert_called_once_with(None, None, None, ['/fixture/repo'], expected)
@@ -34,23 +34,23 @@ class GitAuditTests(unittest.TestCase):
         for value in ('0', '-1', 'nan', 'inf', '3601', 'invalid'):
             with self.subTest(value=value):
                 with patch('sys.argv', ['audit.py', '--git-scan-seconds', value]), \
-                        patch('audit.audit') as collect, contextlib.redirect_stderr(io.StringIO()):
+                        patch('server_audit.cli.audit') as collect, contextlib.redirect_stderr(io.StringIO()):
                     with self.assertRaises(SystemExit) as failure:
                         audit.main()
                     self.assertEqual(failure.exception.code, 2)
                 collect.assert_not_called()
 
     def test_runner_passes_budget_and_preserves_not_requested(self):
-        with patch('audit_runner.collect_git_secrets', wraps=git_secrets.collect) as collect:
+        with patch('server_audit.audit_runner.collect_git_secrets', wraps=git_secrets.collect) as collect:
             report, _ = fixture_report()
         collect.assert_called_once_with(None, scan_seconds=60)
         self.assertEqual(report['checks']['git_secrets']['status'], 'not_requested')
 
     def test_missing_git_is_unknown_in_the_full_report(self):
         def unavailable(roots, scan_seconds):
-            with patch('git_secrets.shutil.which', return_value=None):
+            with patch('server_audit.collectors.git_secrets.shutil.which', return_value=None):
                 return git_secrets.collect(['/fixture/repo'], scan_seconds)
-        with patch('audit_runner.collect_git_secrets', side_effect=unavailable):
+        with patch('server_audit.audit_runner.collect_git_secrets', side_effect=unavailable):
             report, _ = fixture_report()
         self.assertEqual(report['checks']['git_secrets']['status'], 'unavailable')
         self.assertTrue(any(item['message'].startswith('git_secrets:') and item['level'] == 'UNKNOWN'
@@ -60,7 +60,7 @@ class GitAuditTests(unittest.TestCase):
     def test_partial_git_evidence_preserves_later_collection(self):
         partial = {'status': 'partial', 'repositories': [], 'issues': ['Fixture budget reached.']}
         findings = [{'level': 'UNKNOWN', 'message': 'Fixture Git coverage incomplete.'}]
-        with patch('audit_runner.collect_git_secrets', return_value=(partial, findings)):
+        with patch('server_audit.audit_runner.collect_git_secrets', return_value=(partial, findings)):
             report, _ = fixture_report()
         self.assertEqual(report['checks']['git_secrets'], partial)
         self.assertIn(findings[0], report['findings'])
@@ -70,11 +70,11 @@ class GitAuditTests(unittest.TestCase):
         for error in (git_reader.GitShutdownError('Fixture reader shutdown unconfirmed.'),
                       git_reader.GitShutdownInterrupted('Fixture cancellation unconfirmed.'), KeyboardInterrupt()):
             with self.subTest(error=type(error).__name__):
-                with patch('audit_runner.collect_git_secrets', side_effect=error), \
-                        patch('audit_runner.summarize') as summarize, \
-                        patch('audit.audit', side_effect=lambda *args: fixture_report()[0]), \
-                        patch('audit.export_report') as export, patch('sys.argv', ['audit.py', '--export']), \
-                        patch('audit.platform.system', return_value='Linux'), patch.dict(os.environ):
+                with patch('server_audit.audit_runner.collect_git_secrets', side_effect=error), \
+                        patch('server_audit.audit_runner.summarize') as summarize, \
+                        patch('server_audit.cli.audit', side_effect=lambda *args: fixture_report()[0]), \
+                        patch('server_audit.cli.export_report') as export, patch('sys.argv', ['audit.py', '--export']), \
+                        patch('server_audit.cli.platform.system', return_value='Linux'), patch.dict(os.environ):
                     with self.assertRaises(type(error)):
                         audit.main()
                 summarize.assert_not_called()
@@ -87,9 +87,9 @@ class GitAuditTests(unittest.TestCase):
             (root / '.git' / 'HEAD').write_text('ref: refs/heads/main\n')
             workspace = Path(folder) / 'reader'
             workspace.mkdir(mode=0o700)
-            with patch('git_secrets.shutil.which', return_value='fixture-git'), \
-                    patch('git_reader.tempfile.mkdtemp', return_value=str(workspace)), \
-                    patch('git_secrets.scan_objects', side_effect=git_reader.GitShutdownInterrupted('Fixture reader PID 123.')) as scan:
+            with patch('server_audit.collectors.git_secrets.shutil.which', return_value='fixture-git'), \
+                    patch('server_audit.collectors.git_reader.tempfile.mkdtemp', return_value=str(workspace)), \
+                    patch('server_audit.collectors.git_secrets.scan_objects', side_effect=git_reader.GitShutdownInterrupted('Fixture reader PID 123.')) as scan:
                 with self.assertRaisesRegex(KeyboardInterrupt, 'workspace retained'):
                     git_secrets.collect([str(root), str(root / 'other')])
             scan.assert_called_once()

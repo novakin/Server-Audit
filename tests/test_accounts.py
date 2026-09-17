@@ -8,9 +8,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import accounts
-from command_runner import run
-from reporting import account_text_report
+from server_audit.collectors import accounts
+from server_audit.command_runner import run
+from server_audit.reporting import account_text_report
 
 
 class UsageTests(unittest.TestCase):

@@ -2,10 +2,10 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-import audit_runner
-import command_runner
-import network_audit
-import ssh_audit
+from server_audit import audit_runner
+from server_audit import command_runner
+from server_audit.collectors import network_audit
+from server_audit.collectors import ssh_audit
 
 
 class AuditTests(unittest.TestCase):
@@ -16,7 +16,7 @@ class AuditTests(unittest.TestCase):
         self.assertIn('No kernel firewall', findings[0]['message'])
 
     def test_missing_firewall_tools_skip_but_filtering_remains_unknown(self):
-        with patch('command_runner.shutil.which', return_value=None), patch('command_runner.subprocess.run') as process:
+        with patch('server_audit.command_runner.shutil.which', return_value=None), patch('server_audit.command_runner.subprocess.run') as process:
             checks = network_audit.collect_firewalls(command_runner.run)
         process.assert_not_called()
         self.assertTrue(all(check['status'] == 'skipped' for check in checks.values()))
@@ -53,7 +53,7 @@ class AuditTests(unittest.TestCase):
         def fake_run(command):
             output = 'permitrootlogin no\npasswordauthentication no' if command[0] == 'sshd' else ''
             return {'status': 'ok', 'output': output, 'detail': ''}
-        with patch('audit_runner.run', side_effect=fake_run) as runner, patch('audit_runner.os.geteuid', return_value=0, create=True), patch('audit_runner.collect_accounts', return_value=({'status': 'ok', 'accounts': []}, [])), patch('audit_runner.collect_env_files', return_value=({'status': 'ok', 'files': []}, [])), patch('audit_runner.collect_scheduled_tasks', return_value=({'status': 'ok', 'cron_files': []}, [])):
+        with patch('server_audit.audit_runner.run', side_effect=fake_run) as runner, patch('server_audit.audit_runner.os.geteuid', return_value=0, create=True), patch('server_audit.audit_runner.collect_accounts', return_value=({'status': 'ok', 'accounts': []}, [])), patch('server_audit.audit_runner.collect_env_files', return_value=({'status': 'ok', 'files': []}, [])), patch('server_audit.audit_runner.collect_scheduled_tasks', return_value=({'status': 'ok', 'cron_files': []}, [])):
             report = audit_runner.audit('user=alice,addr=192.0.2.1', '/etc/ssh/custom.conf')
         runner.assert_any_call(['sshd', '-T', '-f', '/etc/ssh/custom.conf', '-C', 'user=alice,addr=192.0.2.1'])
         docker_command = next(call.args[0] for call in runner.call_args_list if call.args[0][0] == 'docker')
@@ -79,19 +79,19 @@ class AuditTests(unittest.TestCase):
         self.assertIn('MFA', findings[1]['message'])
 
     def test_missing_command_is_unknown_not_success(self):
-        with patch('command_runner.shutil.which', return_value=None):
+        with patch('server_audit.command_runner.shutil.which', return_value=None):
             self.assertEqual(command_runner.run(['ss'])['status'], 'unavailable')
 
     def test_permission_error_preserves_evidence(self):
         result = subprocess.CompletedProcess(['nft'], 1, '', 'Operation not permitted')
-        with patch('command_runner.shutil.which', return_value='/usr/sbin/nft'), patch('command_runner.subprocess.run', return_value=result):
+        with patch('server_audit.command_runner.shutil.which', return_value='/usr/sbin/nft'), patch('server_audit.command_runner.subprocess.run', return_value=result):
             check = command_runner.run(['nft', 'list', 'ruleset'])
         self.assertEqual(check['status'], 'error')
         self.assertEqual(check['exit_code'], 1)
         self.assertIn('not permitted', check['detail'])
 
     def test_timeout_is_reported(self):
-        with patch('command_runner.shutil.which', return_value='/usr/bin/docker'), patch('command_runner.subprocess.run', side_effect=subprocess.TimeoutExpired('docker', 30)):
+        with patch('server_audit.command_runner.shutil.which', return_value='/usr/bin/docker'), patch('server_audit.command_runner.subprocess.run', side_effect=subprocess.TimeoutExpired('docker', 30)):
             self.assertEqual(command_runner.run(['docker', 'ps'])['status'], 'error')
 
 

@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import env_files
+from server_audit.collectors import env_files
 
 
 class SourceTests(unittest.TestCase):
@@ -77,18 +77,18 @@ class MetadataTests(unittest.TestCase):
 
     def test_acl_presence_and_denial_are_not_clean_results(self):
         path = self.file()
-        with patch('env_files.os.getxattr', return_value=b'ACL metadata'):
+        with patch('server_audit.collectors.env_files.os.getxattr', return_value=b'ACL metadata'):
             item, findings = env_files.inspect_file(path, {})
             self.assertEqual(item['extended_acl'], 'present')
             self.assertTrue(any('extended ACL' in finding['message'] for finding in findings))
-        with patch('env_files.os.getxattr', side_effect=OSError(errno.EACCES, 'denied')):
+        with patch('server_audit.collectors.env_files.os.getxattr', side_effect=OSError(errno.EACCES, 'denied')):
             item, findings = env_files.inspect_file(path, {})
             self.assertEqual(item['extended_acl'], 'unknown')
             self.assertTrue(any(finding['level'] == 'UNKNOWN' for finding in findings))
 
     def test_budget_and_missing_root_are_explicit(self):
         self.file()
-        with patch('env_files.MAX_ENTRIES', 0):
+        with patch('server_audit.collectors.env_files.MAX_ENTRIES', 0):
             result, findings = env_files.collect([str(self.root)])
             self.assertEqual(result['status'], 'partial')
             self.assertTrue(findings)

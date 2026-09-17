@@ -11,9 +11,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import external_probe as cli
-import external_verification as external
-import reporting
+from server_audit import external_probe as cli
+from server_audit import external_verification as external
+from server_audit import reporting
 
 
 def audit_fixture():
@@ -79,7 +79,7 @@ class ExternalVerificationTests(unittest.TestCase):
 
     def test_timeout_and_local_failure_are_distinct(self):
         for error, expected in [(TimeoutError(), 'timeout'), (OSError(errno.ECONNREFUSED, 'refused'), 'refused'), (OSError(errno.ENETUNREACH, 'unreachable'), 'local_or_network_error')]:
-            with patch('external_probe.socket.socket') as factory:
+            with patch('server_audit.external_probe.socket.socket') as factory:
                 client = factory.return_value.__enter__.return_value
                 client.connect.side_effect = error
                 client.getsockname.return_value = ('0.0.0.0', 0)
@@ -203,7 +203,7 @@ class ExternalVerificationTests(unittest.TestCase):
                 ['probe', '--audit', str(audit_path), '--target', '8.8.8.8', '--location', 'office', '--dry-run'],
                 ['import', '--audit', str(audit_path), '--results', str(result_path), '--export', str(root/'exports')],
             ]:
-                with patch('sys.argv', ['external_probe.py', *arguments]), patch('external_probe.socket.socket') as network, contextlib.redirect_stdout(io.StringIO()):
+                with patch('sys.argv', ['external_probe.py', *arguments]), patch('server_audit.external_probe.socket.socket') as network, contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(cli.main(), 0)
                     network.assert_not_called()
             bundle = next((root/'exports').iterdir())

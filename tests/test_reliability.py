@@ -3,14 +3,14 @@
 import unittest
 from unittest.mock import patch
 
-import system_audit
-from test_runner import HostPath, fixture_report
+from server_audit.collectors import system_audit
+from tests.helpers import HostPath, fixture_report
 
 
 class OSFailureTests(unittest.TestCase):
     def test_read_failure_is_evidence_not_platform_fallback(self):
         for error in (PermissionError('denied'), OSError('read failed'), UnicodeError('invalid text')):
-            with self.subTest(error=type(error).__name__), patch('system_audit.Path') as path, patch('system_audit.platform.platform') as fallback:
+            with self.subTest(error=type(error).__name__), patch('server_audit.collectors.system_audit.Path') as path, patch('server_audit.collectors.system_audit.platform.platform') as fallback:
                 path.return_value.read_text.side_effect = error
                 check = system_audit.collect_os()
                 self.assertEqual(check['status'], 'error')
@@ -18,12 +18,12 @@ class OSFailureTests(unittest.TestCase):
                 fallback.assert_not_called()
 
     def test_missing_os_release_preserves_existing_fallback(self):
-        with patch('system_audit.Path') as path, patch('system_audit.platform.platform', return_value='platform fixture'):
+        with patch('server_audit.collectors.system_audit.Path') as path, patch('server_audit.collectors.system_audit.platform.platform', return_value='platform fixture'):
             path.return_value.read_text.side_effect = FileNotFoundError()
             self.assertEqual(system_audit.collect_os(), {'status': 'ok', 'output': 'platform fixture'})
 
     def test_programming_errors_are_not_swallowed(self):
-        with patch('system_audit.Path') as path:
+        with patch('server_audit.collectors.system_audit.Path') as path:
             path.return_value.read_text.side_effect = TypeError('programming defect')
             with self.assertRaises(TypeError):
                 system_audit.collect_os()

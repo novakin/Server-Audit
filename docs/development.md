@@ -4,9 +4,91 @@
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
+## Local setup
+
+Use a trusted local copy and Python 3. No third-party Python dependencies are required. Run unit tests as package modules from the repository root. Runtime code lives in `server_audit/`, tests in `tests/`, shared fixtures in `tests/helpers.py`, and data in `tests/fixtures/`. No editable install or import-path setup is required. Use Linux or Ubuntu WSL for POSIX coverage; Windows can run portable tests but intentionally skips Linux-specific cases. Avoid running a full host audit when a mocked collector test answers the question.
+
+```bash
+python3 -m unittest tests.test_docker_audit -q
+python3 -m unittest discover -s tests -t . -p 'test_*.py' -q
+```
+
+Native Git tests create disposable local repositories with synthetic candidates using an already installed `git` executable. They run automatically on POSIX when Git is available; no Gitleaks binary or `AUDIT_TEST_GITLEAKS_PATH` is used. Pure detector/CLI tests do not need Git. Do not download or add external tools merely to remove a skip: new integrations require prior explicit user approval under [AGENTS.md](../AGENTS.md#external-tool-approval).
+
+A green suite with skips is not complete native validation. Tests do not grant permission to run a production audit or probe external targets. Record the versions actually used and distinguish synthetic error injection from real permission failures.
+
+Run the layout/copy checks and Git suite directly with:
+
+```bash
+python3 -m unittest tests.test_layout -v
+python3 -m unittest tests.test_git_secrets tests.test_git_reader tests.test_git_pack tests.test_git_audit -v
+```
+
+Do not run a test by its file path as a standalone script, or use bare former module names such as `test_runner`. Standard discovery from the root also finds the ordinary `tests` package, but `-s tests -t .` is the documented command. Patch symbols where they are looked up (for example `server_audit.cli.audit` or `server_audit.collectors.git_reader.subprocess.Popen`). Subprocess fixtures use package imports with the repository root as their import directory, not path injection.
+
+## Test ownership
+
+| Tests | Coverage |
+| --- | --- |
+| `tests/test_layout.py` | Runtime-only copy, lazy initializers, thin-launcher exit codes, caller-relative paths and no-network companion operations |
+| `tests/test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
+| `tests/test_runner.py` and `tests/fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
+| `tests/test_reliability.py` | Existing OS failure isolation and evidence preservation |
+| `tests/test_git_pack.py` | Native packed-storage failures, evidence preservation and redaction |
+| `tests/test_git_reader.py` | Bounded pipes, safe metadata, shutdown/cancellation and native SIGINT |
+| `tests/test_git_audit.py` | CLI budgets, failure propagation, no export on abort, redaction and legacy reports |
+| `tests/test_ssh_evidence.py` | Attempted SSH scope, repeated values, additive compatibility and export/rendering |
+| `tests/test_accounts.py` | Accounts, permissions, keys and observed usage |
+| `tests/test_docker_audit.py` | Container projection, findings, absent CLI and daemon failures |
+| `tests/test_env_files.py` | Metadata-only file handling, scope limits and application references |
+| `tests/test_git_secrets.py` | Built-in rules, synthetic native Git storage, local-only scope, redaction and limits |
+| `tests/test_scheduled_tasks.py` | Cron/timers, bounded reads, script references, ownership and redaction |
+| `tests/test_reporting.py` | Rendering, escaping, permissions, completion manifests and CLI output |
+| `tests/test_live_integrations.py` | Opt-in disposable-lab SSH, Docker, firewall and socket checks; see [fixture contract](live-validation.md#repeatable-live-test-fixture-contract) |
+| `tests/test_external_verification.py` | Loopback TCP, mocked public IPv4/IPv6 observations, import/schema limits, scope classification and no-network import/dry run |
+
+Shared host fixture functions live in `tests/helpers.py`; it contains no test cases and performs no collection at import. Helpers used by one module remain in that module.
+
+## Change checklist
+
+1. Inspect the responsible module and its tests. Preserve unrelated local changes and collected evidence.
+2. Add focused regression proof for changed behavior. Use injected command responses and temporary files; include failure/partial paths and redaction checks where relevant.
+3. Follow the [collector contract](architecture.md#architecture-and-extending-audits). Preserve explicit prerequisites and keep rendering separate from collection.
+4. For layout/import changes, compare the discovered test identities and skip gates with the baseline; exercise packaged subprocess fixtures and the runtime-only copy tests. Run focused tests, then the full suite for changes affecting the runner, report contract or shared helpers. Record platform, failures and skips.
+5. For HTML changes, inspect the actual report at desktop/mobile sizes and in light/dark themes. Check overflow, readable statuses, escaping, navigation and print behavior when affected.
+6. Update the relevant guide in the same change. If report fields/statuses change, update contract tests and [format documentation](report-format.md).
+7. Before distributing a snapshot, copy both root launchers and the complete `server_audit/` directory (including its template) into a clean destination, exclude reports/test artifacts, and retain the previous known-good snapshot for rollback. No deployment is implied by a local change.
+
+Do not add a new framework, documentation generator, CI pipeline or release process merely to document this small project. These can be introduced when an actual maintenance requirement exists. Source is maintained in [novakin/Server-Audit](https://github.com/novakin/Server-Audit); automated CI and release tagging are not configured. Before committing, review the staged file list and diff. Keep actual host reports, local lab files and scanner binaries out of the source repository; ignore rules cannot cover every custom output path.
+
+## Documentation maintenance
+
+README is the entry point. Operations owns setup and handling; audit reference owns detection scope; architecture owns extension rules; report format owns status semantics; this guide owns test workflow. Link to the owning page instead of repeating detailed facts. Update the reviewed date when behavior is checked against source. Keep historical verification labeled by date and avoid presenting test totals as permanent guarantees.
+
+## Package layout verification — 2026-09-17
+
+Baseline: merged main `66e930ef4f281be90e38615a5bf484763137328b`. Local environment: Debian 13, Python 3.13.5 and existing Git 2.47.3. All 45 baseline source/document files were matched to their Git blob hashes before editing. This change relocates code, updates imports/mock targets/subprocess imports and the template lookup, and moves shared host fixtures out of the runner test. Collector functions, detection rules, limits, report schemas and command order are not changed.
+
+| Run | Result |
+| --- | --- |
+| Unmodified baseline | 168 discovered; 163 passed, 5 skipped; no failures. |
+| Moved existing suite | Same 168 test cases; 163 passed, same 5 skipped; no failures. |
+| New runtime-copy/layout tests | 5 passed; no skips. |
+| Complete reorganised suite | 173 discovered; 168 passed, 5 skipped; no failures. |
+
+Deterministic runner, reporting and enriched external fixtures have identical JSON, text and HTML outputs before/after the move. Both root CLI help outputs also match: 11 comparisons in total. `tests/fixtures/audit-contract.json` and `server_audit/templates/report_template.html` retain their original blob identities. Package markers do not eagerly import collectors.
+
+`tests/test_layout.py` copies only the two launchers and runtime package, excludes caches and runs from a different directory without `PYTHONPATH`. It exercises launcher exit codes, all help commands, synthetic host export, caller-relative configuration/repository/export paths, no-network companion dry run and offline import. The host audit function is replaced with a synthetic report; no real host collection occurs. Actual export writes JSON/HTML and a completion manifest using the copied template.
+
+The five unchanged skips are one OpenSSH key-generation test (tool absent) and four explicitly prepared native-lab tests. Native Git storage/process tests ran, including packed-index regressions and cancellation. Loopback tests remain local and public endpoints mocked. Compilation, active command examples and relative documentation links/anchors are checked. No tools installed, production hosts audited, native-lab/systemd/Windows validation or browser visual review performed; HTML bytes and layout are unchanged. No CI, release or deployment workflow is introduced.
+
+## Historical verification records
+
+The following records retain their original versions, totals, scope and command/module names. Some named modules were subsequently replaced or moved. They are historical evidence, not current runnable instructions or repeat validation of the package layout; use [Local setup](#local-setup) for current commands. File links and references to retained source point to the current locations. The former Gitleaks records do not reintroduce that dependency.
+
 ## Packed-storage coverage follow-up — 2026-09-17
 
-Verified against PR #3 head `79a7a6faa8fe548d47db042cace00d65def8abb0` in Debian 13 with Python 3.13.5 and the already installed Git 2.47.3. Runtime modules, tests, template and historical runner fixture matched the reviewed Git blob identities before editing. Only `git_reader.py` and `git_secrets.py` change runtime behavior: check pack/index pairing and observe diagnostic presence without retaining raw stderr. No extra Git command, external tool or dependency is introduced.
+Verified against PR #3 head `79a7a6faa8fe548d47db042cace00d65def8abb0` in Debian 13 with Python 3.13.5 and the already installed Git 2.47.3. Runtime modules, tests, template and historical runner fixture matched the reviewed Git blob identities before editing. Only `server_audit/collectors/git_reader.py` and `server_audit/collectors/git_secrets.py` change runtime behavior: check pack/index pairing and observe diagnostic presence without retaining raw stderr. No extra Git command, external tool or dependency is introduced.
 
 | Run | Result |
 | --- | --- |
@@ -51,7 +133,7 @@ No external probes, production host audits, installation, CI, packaging or deplo
 
 Historical Gitleaks implementation record, superseded by the built-in implementation above. Commands and test names below describe that prior revision.
 
-Verified against branch baseline `796a1547f6fe723f7e7ecd6d2937523d4588b05f` in a Debian 13 Linux container with Python 3.13.5. All original runtime modules, the HTML template, test modules and the historical runner fixture were matched to their GitHub blob hashes before testing. Only `git_secrets.py` changes runtime behavior; the existing reliability mocks were adapted to explicit process/scratch ownership without removing assertions or broadening skip gates.
+Verified against branch baseline `796a1547f6fe723f7e7ecd6d2937523d4588b05f` in a Debian 13 Linux container with Python 3.13.5. All original runtime modules, the HTML template, test modules and the historical runner fixture were matched to their GitHub blob hashes before testing. Only `server_audit/collectors/git_secrets.py` changes runtime behavior; the existing reliability mocks were adapted to explicit process/scratch ownership without removing assertions or broadening skip gates.
 
 | Run | Result |
 | --- | --- |
@@ -90,58 +172,9 @@ python3 -m unittest test_reliability test_ssh_evidence -v
 python3 -m unittest discover -s . -p 'test_*.py' -v
 ```
 
-Tests cover OS permission/read/decode errors, unchanged missing-file fallback, scanner scratch creation/control-file/cleanup failures, evidence preservation across repositories and runner checks, propagated programming errors/interruptions, timeout cleanup, private output/redaction, SSH scope on success and failure, repeated values, legacy rendering and the unchanged schema. The historical `fixtures/audit-contract.json` stays byte-for-byte unchanged; `test_runner.py` explicitly asserts the intended additions and corrected limitation.
+Tests cover OS permission/read/decode errors, unchanged missing-file fallback, scanner scratch creation/control-file/cleanup failures, evidence preservation across repositories and runner checks, propagated programming errors/interruptions, timeout cleanup, private output/redaction, SSH scope on success and failure, repeated values, legacy rendering and the unchanged schema. The historical `tests/fixtures/audit-contract.json` stays byte-for-byte unchanged; `tests/test_runner.py` explicitly asserts the intended additions and corrected limitation.
 
 The HTML template/layout is unchanged. Synthetic export tests verify escaping, additive evidence, unchanged source JSON and completion manifests. No new visual browser review, real scanner/OpenSSH integration or systemd-host validation is claimed. Earlier native and browser runs below are separate historical evidence; the [documented live gaps](live-validation.md#remaining-limits) remain open.
-
-## Local setup
-
-Use a trusted local copy and Python 3. No third-party Python dependencies are required. Run unit tests from the project root. Use Linux or Ubuntu WSL for POSIX coverage; Windows can run portable tests but intentionally skips Linux-specific cases. Avoid running a full host audit when a mocked collector test answers the question.
-
-```bash
-python3 -m unittest test_docker_audit -q
-python3 -m unittest discover -s . -p 'test_*.py' -q
-```
-
-Native Git tests create disposable local repositories with synthetic candidates using an already installed `git` executable. They run automatically on POSIX when Git is available; no Gitleaks binary or `AUDIT_TEST_GITLEAKS_PATH` is used. Pure detector/CLI tests do not need Git. Do not download or add external tools merely to remove a skip: new integrations require prior explicit user approval under [AGENTS.md](../AGENTS.md#external-tool-approval).
-
-A green suite with skips is not complete native validation. Tests do not grant permission to run a production audit or probe external targets. Record the versions actually used and distinguish synthetic error injection from real permission failures.
-
-## Test ownership
-
-| Tests | Coverage |
-| --- | --- |
-| `test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
-| `test_runner.py` and `fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
-| `test_reliability.py` | Existing OS failure isolation and evidence preservation |
-| `test_git_pack.py` | Native packed-storage failures, evidence preservation and redaction |
-| `test_git_reader.py` | Bounded pipes, safe metadata, shutdown/cancellation and native SIGINT |
-| `test_git_audit.py` | CLI budgets, failure propagation, no export on abort, redaction and legacy reports |
-| `test_ssh_evidence.py` | Attempted SSH scope, repeated values, additive compatibility and export/rendering |
-| `test_accounts.py` | Accounts, permissions, keys and observed usage |
-| `test_docker_audit.py` | Container projection, findings, absent CLI and daemon failures |
-| `test_env_files.py` | Metadata-only file handling, scope limits and application references |
-| `test_git_secrets.py` | Built-in rules, synthetic native Git storage, local-only scope, redaction and limits |
-| `test_scheduled_tasks.py` | Cron/timers, bounded reads, script references, ownership and redaction |
-| `test_reporting.py` | Rendering, escaping, permissions, completion manifests and CLI output |
-| `test_live_integrations.py` | Opt-in disposable-lab SSH, Docker, firewall and socket checks; see [fixture contract](live-validation.md#repeatable-live-test-fixture-contract) |
-| `test_external_verification.py` | Loopback TCP, mocked public IPv4/IPv6 observations, import/schema limits, scope classification and no-network import/dry run |
-
-## Change checklist
-
-1. Inspect the responsible module and its tests. Preserve unrelated local changes and collected evidence.
-2. Add focused regression proof for changed behavior. Use injected command responses and temporary files; include failure/partial paths and redaction checks where relevant.
-3. Follow the [collector contract](architecture.md#architecture-and-extending-audits). Preserve explicit prerequisites and keep rendering separate from collection.
-4. Run focused tests, then the full suite for changes affecting the runner, report contract or shared helpers. Record platform, failures and skips.
-5. For HTML changes, inspect the actual report at desktop/mobile sizes and in light/dark themes. Check overflow, readable statuses, escaping, navigation and print behavior when affected.
-6. Update the relevant guide in the same change. If report fields/statuses change, update contract tests and [format documentation](report-format.md).
-7. Before distributing a snapshot, include the full runtime file list and template, exclude reports/test artifacts, and retain the previous known-good snapshot for rollback. No deployment is implied by a local change.
-
-Do not add a new framework, documentation generator, CI pipeline or release process merely to document this small project. These can be introduced when an actual maintenance requirement exists. Source is maintained in [novakin/Server-Audit](https://github.com/novakin/Server-Audit); automated CI and release tagging are not configured. Before committing, review the staged file list and diff. Keep actual host reports, local lab files and scanner binaries out of the source repository; ignore rules cannot cover every custom output path.
-
-## Documentation maintenance
-
-README is the entry point. Operations owns setup and handling; audit reference owns detection scope; architecture owns extension rules; report format owns status semantics; this guide owns test workflow. Link to the owning page instead of repeating detailed facts. Update the reviewed date when behavior is checked against source. Keep historical verification labeled by date and avoid presenting test totals as permanent guarantees.
 
 ## Recorded verification — 2026-09-17
 
