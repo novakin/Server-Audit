@@ -19,6 +19,8 @@ Open the generated `report.html`; retain its sibling `data/report.json` and comp
 
 ## Documentation
 
+Coding agents must follow the active [project instructions](AGENTS.md).
+
 | Guide | Use it for |
 | --- | --- |
 | [Operator runbook](docs/operations.md) | Prerequisites, CLI, running audits, exports, retention and troubleshooting |

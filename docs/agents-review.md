@@ -1,6 +1,6 @@
 # Agent instruction proposal review — 2026-09-17
 
-[Documentation index](../README.md) · [Inactive proposal](../AGENTS.proposed.md)
+[Documentation index](../README.md) · [Active project instructions](../AGENTS.md)
 
 ## Scope and outcome
 
@@ -24,4 +24,4 @@ In [audit_runner.py](../audit_runner.py), the general SSH limitation says “ins
 
 The proposal's module references, commands and invariants were checked against source; local Markdown links were validated. No tests or host audits were rerun because only documentation changed. Existing runtime verification remains dated in the [development guide](development.md).
 
-`AGENTS.proposed.md` is deliberately inactive. Adoption would rename it to root `AGENTS.md` and remove its proposal-only paragraph. No active agent instruction file, runtime behavior, deployment or release was changed.
+The user approved adoption on 2026-09-17. The proposal is now root `AGENTS.md`, with its proposal-only paragraph removed. These project instructions are active; runtime behavior is unchanged. The review findings above remain the historical review record.

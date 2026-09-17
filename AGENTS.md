@@ -1,7 +1,5 @@
 # Server security audit — project instructions
 
-Proposal only. This file is not active agent configuration. If adopted, name it `AGENTS.md` at the project root and remove this paragraph.
-
 ## Scope and starting points
 
 This is an internal, read-only Ubuntu/Debian host audit using Python's standard library and available native tools. Read [README.md](README.md), then the relevant guide before changing behavior. The audit collects evidence; it does not certify security, prove external reachability or issue malware verdicts.
