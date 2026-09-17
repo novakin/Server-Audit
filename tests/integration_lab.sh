@@ -120,12 +120,16 @@ fi
 
 mkdir "$lab"; created_lab=1
 mkdir "$results"; created_results=1
+chown root:root "$lab" "$results"
+chmod 700 "$lab" "$results"
 if [[ ! -d /run/sshd ]]; then mkdir -m 755 /run/sshd; created_run_sshd=1; fi
 ssh-keygen -q -t ed25519 -N '' -f "$lab/host_key"
 ssh-keygen -q -t ed25519 -N '' -f "$lab/client_key"
 chmod 600 "$lab/host_key" "$lab/client_key"
 cp "$lab/client_key.pub" "$keys"
+chown root:root "$keys" "$lab/host_key" "$lab/client_key"
 chmod 600 "$keys"
+stat -c 'Lab permissions: %U:%G %a %n' "$lab" "$keys" "$lab/host_key"
 printf '[127.0.0.1]:22222 %s\n' "$(cat "$lab/host_key.pub")" > "$lab/known_hosts"
 cat > "$lab/sshd_config" <<'CONFIG'
 Port 22222
