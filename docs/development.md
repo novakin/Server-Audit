@@ -6,7 +6,7 @@ Maintain the internal tool with focused changes, reproducible fixtures and expli
 
 ## Local setup
 
-Use a trusted local copy and Python 3. No third-party Python dependencies are required. Run unit tests as package modules from the repository root. Runtime code lives in `server_audit/`, tests in `tests/`, shared fixtures in `tests/helpers.py`, and data in `tests/fixtures/`. No editable install or import-path setup is required. Use Linux or Ubuntu WSL for POSIX coverage; Windows can run portable tests but intentionally skips Linux-specific cases. Avoid running a full host audit when a mocked collector test answers the question.
+Use a trusted local copy and Python 3. No third-party Python dependencies are required. Run unit tests as package modules from the repository root. Runtime code lives in `server_audit/`, tests in `tests/`, shared host fixtures in `tests/helpers.py`, Git fixture helpers in `tests/git_helpers.py`, and data in `tests/fixtures/`. No editable install or import-path setup is required. Use Linux or Ubuntu WSL for POSIX coverage; Windows can run portable tests but intentionally skips Linux-specific cases. Avoid running a full host audit when a mocked collector test answers the question.
 
 ```bash
 python3 -m unittest tests.test_docker_audit -q
@@ -35,22 +35,24 @@ Do not run a test by its file path as a standalone script, or use bare former mo
 | `tests/test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `tests/test_runner.py` and `tests/fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
 | `tests/test_reliability.py` | Existing OS failure isolation and evidence preservation |
-| `tests/test_git_reference_boundaries.py` | Multiline/comment boundaries, conservative exclusions, unchanged locations/redaction and loose/packed SHA-1/SHA-256 regression cases |
-| `tests/test_git_regressions.py` | Missing primary config, literal/reference boundaries, Git boolean/NUL parsing, ruleset 2 and redacted exports |
+| `tests/test_git_reference_boundaries.py` | Literal/reference exclusions, multiline/comment boundaries, per-line deduplication and loose/packed SHA-1/SHA-256 cases |
+| `tests/test_git_regressions.py` | Missing/unreadable primary config, storage-format integration, preserved findings and representative redacted exports |
 | `tests/test_git_pack.py` | Native packed-storage failures, evidence preservation and redaction |
-| `tests/test_git_reader.py` | Bounded pipes, safe metadata, shutdown/cancellation and native SIGINT |
+| `tests/test_git_reader.py` | Bounded pipes, ungated mocked protocol tests, native boolean-spelling parsing, shutdown/cancellation and native SIGINT |
 | `tests/test_git_audit.py` | CLI budgets, failure propagation, no export on abort, redaction and legacy reports |
 | `tests/test_ssh_evidence.py` | Attempted SSH scope, repeated values, additive compatibility and export/rendering |
 | `tests/test_accounts.py` | Accounts, permissions, keys and observed usage |
 | `tests/test_docker_audit.py` | Container projection, findings, absent CLI and daemon failures |
 | `tests/test_env_files.py` | Metadata-only file handling, scope limits and application references |
-| `tests/test_git_secrets.py` | Built-in rules, synthetic native Git storage, local-only scope, redaction and limits |
+| `tests/test_git_secrets.py` | Built-in rule families, ruleset metadata, synthetic native Git storage, local-only scope, redaction and limits |
 | `tests/test_scheduled_tasks.py` | Cron/timers, bounded reads, script references, ownership and redaction |
 | `tests/test_reporting.py` | Rendering, escaping, permissions, completion manifests and CLI output |
 | `tests/test_live_integrations.py` | Opt-in disposable-lab SSH, Docker, firewall and socket checks; see [fixture contract](live-validation.md#repeatable-live-test-fixture-contract) |
 | `tests/test_external_verification.py` | Loopback TCP, mocked public IPv4/IPv6 observations, import/schema limits, scope classification and no-network import/dry run |
 
-Shared host fixture functions live in `tests/helpers.py`; it contains no test cases and performs no collection at import. Helpers used by one module remain in that module.
+Shared host fixtures stay in `tests/helpers.py`. `tests/git_helpers.py` contains only native Git invocation, repository initialization and byte snapshots; callers own temporary directories and assertions. Specialized damaged-storage and cancellation harnesses stay explicit in their tests. Neither helper module collects host evidence at import. Helpers used by one module remain there.
+
+Reference scenarios have one unit-test owner in `test_git_reference_boundaries.py`; representative stored-object and export cases deliberately exercise additional integration boundaries. Cover the full boolean-spelling table at reader level and only implicit, empty, explicit-true and explicit-false forms through the collector in each hash format. Keep malformed mocked protocol cases outside native prerequisite gates. Consolidation must preserve distinct failure scenarios and useful diagnostics, not historical test counts.
 
 ## Change checklist
 

@@ -19,6 +19,7 @@ TOKEN = TOKEN[:4] + (TOKEN[4:] + 'EFGH')[:36]
 
 
 class RuleTests(unittest.TestCase):
+
     def matches(self, value):
         return list(git_secrets.detections(value, 'config', 'configuration', None, time.monotonic() + 5))
 
@@ -40,13 +41,15 @@ class RuleTests(unittest.TestCase):
                 self.assertNotIn(value, json.dumps(matches))
                 self.assertNotIn('PrivateSentinel42', json.dumps(matches))
 
-    def test_placeholders_and_environment_references_are_not_literal_credentials(self):
-        values = ['password="changeme"', 'password="${PRIVATE_PASSWORD}"',
-                  'api_key="your_api_key"', 'secret=process.env.SECRET_KEY',
-                  'password=os.environ.get("PASSWORD")', 'password="{{ password }}"']
-        for value in values:
-            with self.subTest(value=value):
-                self.assertEqual(self.matches(value.encode()), [])
+    def test_ruleset_version_is_present_without_requested_or_available_git(self):
+        report, findings = git_secrets.collect()
+        self.assertEqual(report['ruleset_version'], 2)
+        self.assertEqual(report['status'], 'not_requested')
+        self.assertEqual(findings, [])
+        with patch.object(git_secrets.shutil, 'which', return_value=None):
+            unavailable, _ = git_secrets.collect(['/fixture/repo'])
+        self.assertEqual(unavailable['ruleset_version'], 2)
+        self.assertEqual(unavailable['status'], 'unavailable')
 
     def test_line_and_byte_locations_without_content(self):
         data = b'# synthetic\npassword="PrivateSentinel42"\n'
@@ -91,6 +94,7 @@ class RuleTests(unittest.TestCase):
 
 @unittest.skipUnless(os.name == 'posix' and shutil.which('git'), 'Requires local Git and POSIX pipes')
 class LocalGitTests(unittest.TestCase):
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
