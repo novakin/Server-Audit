@@ -86,13 +86,15 @@ class GitProcess:
         self.deadline = deadline
         self.buffer = bytearray()
         self.eof = False
+        self.stderr_seen = False
+        self.stderr_eof = False
         self.process = None
 
     def __enter__(self):
         remaining(self.deadline)
         self.process = subprocess.Popen(
             self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, env=self.environment, cwd=self.directory,
+            stderr=subprocess.PIPE, env=self.environment, cwd=self.directory,
             bufsize=0, start_new_session=os.name == 'posix',
         )
         try:
@@ -115,21 +117,37 @@ class GitProcess:
                         raise GitShutdownInterrupted(detail) from None
                     raise GitShutdownError(detail) from None
         finally:
-            for stream in (self.process.stdin, self.process.stdout):
+            for stream in (self.process.stdin, self.process.stdout, self.process.stderr):
                 try:
                     stream.close()
                 except OSError:
                     pass  # Closing a pipe must not replace cancellation/shutdown evidence.
 
+    def _discard_stderr(self):
+        # Remember only the presence of diagnostics, not their secret-bearing text.
+        chunk = os.read(self.process.stderr.fileno(), CHUNK_BYTES)
+        if chunk:
+            self.stderr_seen = True
+        else:
+            self.stderr_eof = True
+
     def _fill(self):
-        readable, _, _ = select.select([self.process.stdout], [], [], remaining(self.deadline))
+        streams = []
+        if not self.eof:
+            streams.append(self.process.stdout)
+        if not self.stderr_eof:
+            streams.append(self.process.stderr)
+        readable, _, _ = select.select(streams, [], [], remaining(self.deadline))
         if not readable:
             raise GitReadLimit('Repository time budget reached while reading Git output.')
-        chunk = os.read(self.process.stdout.fileno(), CHUNK_BYTES)
-        if chunk:
-            self.buffer.extend(chunk)
-        else:
-            self.eof = True
+        if self.process.stderr in readable:
+            self._discard_stderr()
+        if self.process.stdout in readable:
+            chunk = os.read(self.process.stdout.fileno(), CHUNK_BYTES)
+            if chunk:
+                self.buffer.extend(chunk)
+            else:
+                self.eof = True
 
     def line(self, maximum=256):
         while True:
@@ -178,9 +196,14 @@ class GitProcess:
     def write(self, data):
         position = 0
         while position < len(data):
-            _, writable, _ = select.select([], [self.process.stdin], [], remaining(self.deadline))
-            if not writable:
+            streams = [] if self.stderr_eof else [self.process.stderr]
+            readable, writable, _ = select.select(streams, [self.process.stdin], [], remaining(self.deadline))
+            if not readable and not writable:
                 raise GitReadLimit('Repository time budget reached while requesting a Git object.')
+            if readable:
+                self._discard_stderr()
+            if not writable:
+                continue
             try:
                 written = os.write(self.process.stdin.fileno(), data[position:position + 4096])
             except BlockingIOError:
@@ -191,12 +214,22 @@ class GitProcess:
 
     def finish(self, accepted=(0,)):
         self.process.stdin.close()
+        # Drain both pipes before waiting: even an exit-zero reader may diagnose
+        # incomplete storage, including after its final stdout byte.
+        while True:
+            if self.buffer:
+                raise GitReadError('Git returned unexpected output after the requested data.')
+            if self.eof and self.stderr_eof:
+                break
+            self._fill()
         try:
             code = self.process.wait(timeout=remaining(self.deadline))
         except subprocess.TimeoutExpired:
             raise GitReadLimit('Repository time budget reached while waiting for Git.') from None
         if code not in accepted:
             raise GitReadError('Git could not read the selected data; raw diagnostics withheld.')
+        if self.stderr_seen:
+            raise GitReadError('Git emitted diagnostics; coverage is unconfirmed. Raw diagnostics withheld.')
         return code
 
 

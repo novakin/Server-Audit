@@ -4,6 +4,27 @@
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
+## Packed-storage coverage follow-up — 2026-09-17
+
+Verified against PR #3 head `79a7a6faa8fe548d47db042cace00d65def8abb0` in Debian 13 with Python 3.13.5 and the already installed Git 2.47.3. Runtime modules, tests, template and historical runner fixture matched the reviewed Git blob identities before editing. Only `git_reader.py` and `git_secrets.py` change runtime behavior: check pack/index pairing and observe diagnostic presence without retaining raw stderr. No extra Git command, external tool or dependency is introduced.
+
+| Run | Result |
+| --- | --- |
+| Unmodified feature suite | 153 discovered; 148 passed, 5 skipped; no failures. |
+| Four review regressions against unmodified code | Healthy/corrupt-pack cases passed; missing/corrupt-index cases failed as expected. |
+| Original four review regressions after the fix | 4 passed; no skips. |
+| Focused Git detector, reader, packed-storage and pipeline suite | 76 passed; no skips. |
+| Complete changed suite | 168 discovered; 163 passed, 5 skipped; no failures. |
+
+```bash
+python3 -m unittest test_git_secrets test_git_reader test_git_pack test_git_audit -v
+python3 -m unittest discover -s . -p 'test_*.py' -v
+```
+
+Nine new native packed-storage tests cover healthy, missing, corrupt, truncated and mismatched indexes, missing/corrupt packs, source immutability, preserved config/loose-object findings, later repositories and redacted exports. Six additional process tests cover late/large stderr, stderr during request writes or finish, a stalled stderr pipe and accepted quiet exit statuses. The existing stderr test now requires an exit-zero diagnostic to fail collection while preserving its redaction assertions. Cancellation and shutdown regressions remain active.
+
+Raw diagnostics are discarded chunk by chunk, with only a boolean retained. Diagnostics conservatively make coverage incomplete; this is not message classification or full pack/index integrity verification. No source repair, new scanner, renderer/layout change, production audit or external probe was performed. CLI help and Python compilation passed. The five skips remain one OpenSSH key-generation test (tool absent) and four separately prepared native-lab checks; native Git tests ran. Historical results below describe earlier revisions.
+
 ## Built-in local Git inspection — 2026-09-17
 
 Verification used Debian 13, Python 3.13.5 and the already installed Git 2.47.3, based on main commit `ab9af66215f3b66f2306f5a942c1641a6b546138`. Unchanged runtime modules, existing retained test files and the historical runner fixture were matched to GitHub blob identities. This was an isolated container, not a production audit or a fully booted systemd host.
@@ -93,6 +114,7 @@ A green suite with skips is not complete native validation. Tests do not grant p
 | `test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `test_runner.py` and `fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
 | `test_reliability.py` | Existing OS failure isolation and evidence preservation |
+| `test_git_pack.py` | Native packed-storage failures, evidence preservation and redaction |
 | `test_git_reader.py` | Bounded pipes, safe metadata, shutdown/cancellation and native SIGINT |
 | `test_git_audit.py` | CLI budgets, failure propagation, no export on abort, redaction and legacy reports |
 | `test_ssh_evidence.py` | Attempted SSH scope, repeated values, additive compatibility and export/rendering |

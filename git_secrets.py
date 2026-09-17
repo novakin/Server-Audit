@@ -111,6 +111,8 @@ def inspect_storage(directory, repository, deadline):
     device = objects.stat().st_dev
     stack = [(objects, 0)]
     examined = 0
+    packs = set()
+    indexes = set()
     while stack:
         remaining(deadline)
         current, depth = stack.pop()
@@ -131,9 +133,18 @@ def inspect_storage(directory, repository, deadline):
                     raise GitReadError('Symlink or special-file object storage is not followed.')
                 if current == objects / 'info' and entry.name in ('alternates', 'http-alternates'):
                     raise GitReadError('Alternate object stores are not followed; select each standalone repository separately.')
+                if current == objects / 'pack' and stat.S_ISREG(info.st_mode):
+                    if entry.name.endswith('.pack'):
+                        packs.add(entry.name[:-5])
+                    elif entry.name.endswith('.idx'):
+                        indexes.add(entry.name[:-4])
                 if entry.name.endswith('.promisor'):
                     add_issue(repository, 'Partial-clone storage observed; only objects already present are inspected.')
     repository['storage_entries_examined'] = examined
+    pairs_complete = packs == indexes
+    if not pairs_complete:
+        add_issue(repository, 'Pack/index pairing is incomplete; some packed objects may be unreadable.')
+    return pairs_complete
 
 
 def object_header(line, expected_length):
@@ -146,8 +157,8 @@ def object_header(line, expected_length):
     return fields[0].decode('ascii'), fields[1].decode('ascii'), int(fields[2])
 
 
-def scan_objects(executable, view, directory, repository, deadline, algorithm):
-    scan = {'mode': 'local_objects', 'status': 'ok', 'detections': [],
+def scan_objects(executable, view, directory, repository, deadline, algorithm, storage_complete=True):
+    scan = {'mode': 'local_objects', 'status': 'ok' if storage_complete else 'partial', 'detections': [],
             'objects_seen': 0, 'objects_scanned': 0, 'oversized_objects': 0, 'bytes_read': 0}
     repository['scans'].append(scan)
     env = environment(view, directory / 'objects')
@@ -214,7 +225,7 @@ def scan_repository(raw, executable, seconds):
             add_detections(repository, config_scan, data, name, 'configuration', None, deadline)
             if re.search(rb'(?im)^\s*\[include(?:if)?\b', data):
                 add_issue(repository, 'Included configuration is not followed; only local config files are inspected.')
-        inspect_storage(directory, repository, deadline)
+        storage_complete = inspect_storage(directory, repository, deadline)
         if (directory / 'shallow').exists():
             add_issue(repository, 'Shallow repository observed; earlier missing history cannot be inspected.')
         with repository_view() as view:
@@ -224,7 +235,8 @@ def scan_repository(raw, executable, seconds):
             repository['object_format'] = algorithm
             if partial_clone:
                 add_issue(repository, 'Partial-clone storage observed; only objects already present are inspected.')
-            scan_objects(executable, view, directory, repository, deadline, algorithm)
+            scan_objects(executable, view, directory, repository, deadline, algorithm,
+                         storage_complete=storage_complete)
     except GitReadError as error:
         add_issue(repository, str(error))
     except (OSError, ValueError):

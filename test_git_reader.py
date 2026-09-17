@@ -67,6 +67,7 @@ class ReaderUnitTests(unittest.TestCase):
                 reader.__exit__(KeyboardInterrupt, KeyboardInterrupt(), None)
         reader.process.stdin.close.assert_called_once()
         reader.process.stdout.close.assert_called_once()
+        reader.process.stderr.close.assert_called_once()
 
     def test_nested_shutdown_failures_preserve_both_reader_diagnostics(self):
         reader = git_reader.GitProcess(['fixture'], {}, '.', time.monotonic() + 5)
@@ -194,11 +195,100 @@ class ReaderProcessTests(unittest.TestCase):
                 self.assertEqual(reader.all(100), b'')
                 reader.finish()
 
-    def test_stderr_is_never_captured(self):
+    def test_stderr_is_redacted_and_exit_zero_is_not_clean(self):
         code = "import os; os.write(2,b'PRIVATE_SENTINEL'); os.write(1,b'ok\\n')"
-        with self.reader(code) as reader:
-            self.assertEqual(reader.all(100), b'ok\n')
-            reader.finish()
+        with self.assertRaises(git_reader.GitReadError) as caught:
+            with self.reader(code) as reader:
+                self.assertEqual(reader.all(100), b'ok\n')
+                reader.finish()
+        self.assertEqual(reader.process.returncode, 0)
+        self.assertTrue(reader.stderr_seen)
+        self.assertEqual(reader.buffer, b'')
+        self.assertIn('diagnostics', str(caught.exception))
+        self.assertNotIn('PRIVATE_SENTINEL', str(caught.exception))
+
+    def test_late_stderr_after_stdout_eof_is_not_lost(self):
+        code = """
+import os
+import time
+os.write(1, b'ok\\n')
+os.close(1)
+time.sleep(0.02)
+os.write(2, b'PRIVATE_SENTINEL')
+"""
+        with self.assertRaises(git_reader.GitReadError) as caught:
+            with self.reader(code) as reader:
+                self.assertEqual(reader.all(100), b'ok\n')
+                reader.finish()
+        self.assertEqual(reader.process.returncode, 0)
+        self.assertNotIn('PRIVATE_SENTINEL', str(caught.exception))
+
+    def test_large_stderr_is_drained_without_blocking_stdout(self):
+        code = """
+import os
+chunk = b'PRIVATE_SENTINEL' * 4096
+for _ in range(32):
+    os.write(2, chunk)
+os.write(1, b'ok\\n')
+"""
+        with self.assertRaises(git_reader.GitReadError) as caught:
+            with self.reader(code) as reader:
+                self.assertEqual(reader.all(100), b'ok\n')
+                reader.finish()
+        self.assertEqual(reader.process.returncode, 0)
+        self.assertEqual(reader.buffer, b'')
+        self.assertNotIn('PRIVATE_SENTINEL', str(caught.exception))
+
+    def test_stderr_is_drained_while_writing_requests(self):
+        code = """
+import os
+import sys
+os.write(2, b'PRIVATE_SENTINEL' * 16384)
+data = sys.stdin.buffer.read(128 * 1024)
+os.write(1, str(len(data)).encode() + b'\\n')
+"""
+        with self.assertRaises(git_reader.GitReadError) as caught:
+            with self.reader(code) as reader:
+                reader.write(b'x' * (128 * 1024))
+                self.assertEqual(reader.line(), b'131072')
+                reader.finish()
+        self.assertEqual(reader.process.returncode, 0)
+        self.assertNotIn('PRIVATE_SENTINEL', str(caught.exception))
+
+    def test_finish_drains_stderr_emitted_after_stdin_closes(self):
+        code = """
+import os
+import sys
+sys.stdin.buffer.read()
+os.write(2, b'PRIVATE_SENTINEL' * 16384)
+"""
+        with self.assertRaises(git_reader.GitReadError) as caught:
+            with self.reader(code) as reader:
+                reader.finish()
+        self.assertEqual(reader.process.returncode, 0)
+        self.assertNotIn('PRIVATE_SENTINEL', str(caught.exception))
+
+    def test_stderr_that_stays_open_is_limited_and_reader_is_reaped(self):
+        code = """
+import os
+import time
+os.close(1)
+os.write(2, b'PRIVATE_SENTINEL')
+time.sleep(30)
+"""
+        started = time.monotonic()
+        with self.assertRaises(git_reader.GitReadLimit):
+            with self.reader(code, seconds=0.1) as reader:
+                self.assertEqual(reader.all(100), b'')
+                reader.finish()
+        self.assertIsNotNone(reader.process.returncode)
+        self.assertLess(time.monotonic() - started, 3)
+
+    def test_accepted_nonzero_status_without_diagnostics_is_preserved(self):
+        with self.reader('raise SystemExit(1)') as reader:
+            self.assertEqual(reader.all(100), b'')
+            self.assertEqual(reader.finish(accepted=(0, 1)), 1)
+        self.assertFalse(reader.stderr_seen)
 
     def test_real_sigint_stops_reader_and_preserves_denied_shutdown(self):
         child = "import os,sys,time; from pathlib import Path; Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)"
