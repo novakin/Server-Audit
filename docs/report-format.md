@@ -36,6 +36,23 @@ For example, `port 22` followed by `port 2222` retains legacy `selected_settings
 
 Consumers needing all values should prefer the new map. For older reports without it, inspect raw output rather than assuming the legacy scalar is complete. Old reports still render. New text reports add scope lines before SSH raw evidence; HTML exposes the additive fields in collected evidence. The general SSH limitation now describes the selected on-disk configuration, not unconditionally the installed default. No evidence establishes what configuration the running daemon loaded.
 
+## Built-in Git secret evidence
+
+`checks.git_secrets` retains the `status`, `repositories` and `limitations` containers. The additive `detector: "builtin"`, `ruleset_version: 1`, `rule_ids` and `limits` identify the implementation and selected bounds even when the check is not requested. A requested scan without the approved local Git reader is `unavailable`, not a clean or skipped scan.
+
+Each repository retains `path`, `status` and `scans`, and adds safe `issues`, `detections_found`, and `elapsed_seconds`. Successful scope resolution records `git_directory`; completed storage preflight records `storage_entries_examined`; recognized storage records `object_format`. Missing fields do not imply success. Current scan modes are:
+
+| Mode | Evidence |
+| --- | --- |
+| `git_configuration` | Content inspection of `config` and `config.worktree` only, with `files_scanned`. Includes are not followed. |
+| `local_objects` | Stored blob/commit/tag bytes, including unreachable objects still present. Records `objects_seen`, `objects_scanned`, `oversized_objects`, `bytes_read`. Tree objects count as seen but are not content-scanned. |
+
+Every detection retains `rule`, `file`, `start_line`, `end_line`, `commit` and adds `object_id`, `object_type`, `byte_offset`. `rule` is a fixed detector ID. Configuration locations use fixed filenames, null object IDs and `object_type: "configuration"`. Stored-object locations use `file: "git-object:<object-id>"`; this is a location label, **not an original working filename**. `commit` contains an ID only when the detection is in that commit object; for blobs/tags/config it is the existing empty-string type, not an invented containing commit. Line numbers are one-based positions of the candidate start in the inspected raw object/config bytes; byte offsets are zero-based. At most one record per rule per line per source is retained. Matching text, values and messages are excluded.
+
+Compatibility decision: host `schema_version` stays at 1 because container shapes and legacy detection field types remain compatible. **Coverage has intentionally changed:** the former Gitleaks `history` and `working_directory` modes are no longer emitted, working files are not scanned, and rules are not equivalent to Gitleaks. Consumers must inspect detector/ruleset/mode before comparing audits; disappearance of an old finding is not proof of remediation. Old Git reports still render, including their original mode names and any legacy scratch-failure fields. The historical runner fixture remains byte-for-byte unchanged; tests assert the intentional new metadata and scope.
+
+Limits and rule definitions are owned by [Git coverage](audit-reference.md#git-secrets). A complete export manifest can contain partial Git coverage; interruption or unconfirmed reader shutdown does not create a completed audit.
+
 ## Check statuses
 
 | Status | Meaning |
@@ -51,7 +68,7 @@ Nested records may use additional domain statuses such as `unknown`, `inspected`
 
 `REVIEW` means observed evidence merits a local decision. `UNKNOWN` means a relevant conclusion cannot be reached from available evidence. There is no severity ranking, compliance certification or malware verdict. Missing optional firewall tools do not create individual findings, but lack of any readable kernel backend creates a consolidated Unknown finding.
 
-OS metadata read/decode errors return an `error` check and the runner adds an Unknown finding. Requested Git scratch setup/access errors preserve other evidence: affected repositories are `error` without scan evidence or `partial` with evidence, and the overall Git check is `partial` with an Unknown finding. On cleanup failure, the repository additionally records `cleanup_status: error` and `scratch_path`; report handling remains restricted. See [scanner handling](operations.md#scanner-failures-and-interruption). These changes do not redefine Docker/account statuses or turn interruption into a completed report.
+OS metadata read/decode errors return an `error` check and the runner adds an Unknown finding. Expected Git access, format, workspace and budget failures preserve earlier detections and other repositories: the affected repository is `error` without scan records or `partial` with records, and the overall Git check is `partial` with an Unknown finding. Safe issue messages identify the reason; raw Git stderr and OS error text are withheld. Workspace cleanup failure is recorded as a repository issue. Unconfirmed reader shutdown is fatal and prevents final report export; see [reader handling](operations.md#scanner-failures-and-interruption). Docker/account status semantics are unchanged.
 
 ## Export manifest
 

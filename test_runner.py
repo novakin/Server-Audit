@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import audit_runner
+import git_secrets
 import reporting
 
 
@@ -76,6 +77,18 @@ class RunnerTests(unittest.TestCase):
         expected['report']['limitations'][1] = (
             'SSH settings describe the selected on-disk configuration (sshd default unless --ssh-config is supplied), '
             'not necessarily the running daemon or its command-line overrides. Match rules require --ssh-context.')
+        # Intentional replacement: built-in local-object scope, not Gitleaks scans.
+        expected_git = expected['report']['checks']['git_secrets']
+        expected_git.update(
+            detector='builtin', ruleset_version=1,
+            rule_ids=['private-key', 'github-token', 'gitlab-token', 'aws-access-key-id',
+                      'slack-token', 'credential-in-url', 'authorization-header', 'credential-assignment'],
+            limits={'seconds_per_repository': 60.0, 'objects': 10000,
+                    'bytes_per_object': 2097152, 'content_bytes_per_repository': 67108864,
+                    'bytes_per_config_file': 262144, 'detections_per_repository': 500,
+                    'storage_entries': 50000},
+            limitations=list(git_secrets.LIMITATIONS))
+        self.assertIn('Current working files are not scanned.', expected_git['limitations'][1])
         self.assertEqual(report, expected['report'])
         self.assertEqual(list(report['checks']), list(expected['report']['checks']))
         self.assertEqual(calls, expected['commands'])
