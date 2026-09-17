@@ -36,3 +36,28 @@ jobs:
         env:
           AUDIT_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python -m tests.ci
+
+  live-integration:
+    name: Ubuntu live integration
+    needs: linux-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Prepare, test and clean the disposable lab
+        run: |
+          if sudo --non-interactive env GITHUB_SHA="$GITHUB_SHA" \
+              bash tests/integration_lab.sh --disposable-vm "$(command -v python)"; then
+            echo 'Four live tests passed; lab cleanup completed.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            status=$?
+            echo 'Live integration or its setup/cleanup failed; see the job log.' >> "$GITHUB_STEP_SUMMARY"
+            exit "$status"
+          fi
