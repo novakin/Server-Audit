@@ -13,12 +13,12 @@ Reference for what each audit observes, what it exports and what remains unverif
 - Running/failed systemd services, available package updates from cached APT metadata, metadata timestamps and reboot-required state.
 - User accounts, groups, password/expiry state, sudo policy, authorized public keys and retained login evidence. See account scope below.
 - Environment-file ownership/modes, ACL presence and ancestor permissions; systemd file references and Docker environment counts/mount candidates.
-- Optional Gitleaks secret detection in explicitly selected local repository history and working files.
+- Optional built-in secret detection in explicitly selected local Git configuration and stored objects.
 - Cron definitions, systemd timers, scheduled-file ownership/modes and suspicious-pattern findings, without executing or exporting command bodies.
 
 Missing commands, denied access and timeouts are reported explicitly. Missing optional firewall tools and Docker remain visible in evidence without creating individual findings. If no kernel firewall backend can be inspected, a consolidated unknown finding is emitted. Permission failures remain findings. Available updates and failed services produce review findings. Summary counts are not a security score.
 
-Text output limits command evidence sections to 80 lines; structured inventories are shown in full. JSON preserves collected evidence. Host inspection commands have a 30-second timeout each and resolve through standard system directories, including `/usr/local/bin`. Optional Gitleaks scans have separate deadlines described below.
+Text output limits command evidence sections to 80 lines; structured inventories are shown in full. JSON preserves collected evidence. Host inspection commands have a 30-second timeout each and resolve through standard system directories, including `/usr/local/bin`. Optional local Git inspection has a shared per-repository budget described below.
 
 ## Environment files and application sources
 
@@ -41,20 +41,53 @@ This provides configured-source evidence, not proof of the effective environment
 
 ## Git secrets
 
-Git scanning is opt-in because it reads repository content. Install Git and a current [Gitleaks release](https://github.com/gitleaks/gitleaks#installing) on the server through your normal tool-installation process; the integration is tested with v8.30.1. The audit never installs or downloads a scanner automatically. Missing Gitleaks is an unknown result for a requested scan.
+Secret detection is built into Python. The approved local `git` executable is used only to read its own storage format; Gitleaks and other scanners are not required or invoked. The check remains opt-in because it inspects stored content. An explicitly requested check without Git is unavailable/Unknown, not clean. Nothing is installed or downloaded automatically.
 
 ```bash
-sudo python3 audit.py --git-root /srv/app --env-root /srv/app --export ./audits
-sudo python3 audit.py --git-root /srv/app --git-root /opt/another-repo --export
+sudo python3 audit.py --git-root /srv/app --git-scan-seconds 60 --export ./audits
+sudo python3 audit.py --git-root /srv/app/.git --git-root /opt/another-repo --export
 ```
 
-Pass a repository root or its `.git` path. Normal repositories and worktrees get two scans: locally available Git history across all refs, and working files (including uncommitted/ignored files supported by Gitleaks). Bare repositories receive a history scan only. The scanner uses built-in rules rather than repository-provided configuration; repository ignore files and `gitleaks:allow` comments are not honored. Built-in rule allowlists still apply. No clone, fetch, remote search, key validation, remediation or history rewriting occurs.
+Select a normal repository root, its actual `.git` directory, or a bare repository. SHA-1 and SHA-256 storage are supported by the reader design and exercised with native Git tests. Git-file indirection, shared-worktree `commondir`, alternate object stores, symlink/special-file storage and cross-filesystem object directories are rejected with incomplete coverage rather than followed outside the selected storage. Select standalone repositories individually. Config includes are not followed; their presence produces an incomplete-scope issue.
 
-Gitleaks reads files/commit patches to detect credentials and private-key material; this is separate from metadata-only environment permission checks. It runs with full redaction. Audit output retains only rule ID, path, line numbers and commit ID. Secrets, matching text, author/email and commit messages are discarded; raw scanner logs are not captured into reports. Scratch directories are private and cleaned after each repository. Each scan mode has a 110-second scanner timeout and a 120-second process deadline; failure, timeout or malformed output is reported as unknown rather than clean.
+The two reported modes are `git_configuration` (config/config.worktree only) and `local_objects` (stored blobs, commits and annotated tags). Objects are inspected once, including unreachable objects still present, loose objects and packed/delta objects. **Current working files are not scanned**, even if untracked or ignored files contain credentials. Deleted historical content is inspected only while its objects remain locally available. Reflogs, index files, hooks and other administrative-file contents are not scanned. Tree objects are counted but not used to reconstruct filenames. Missing/pruned history, LFS payloads and submodule repositories need separate coverage; shallow/partial-clone markers are reported.
 
-Shallow clones, unreachable/deleted objects, remote-only refs, LFS objects, submodules, archives and encoded content may require additional coverage. No detection does not prove absence. If a finding is a real credential, revoke/rotate it and assess exposure; deleting it from a file or commit does not revoke it.
+### Built-in candidate rules
 
-The [linked search-pattern gist](https://gist.github.com/win3zz/0a1c70589fcbea64dba4588b93095855) can help manual GitHub searches scoped to repositories you own, but it is not a local/history scanner. Fixed prefixes, file extensions and context keywords can miss secrets. The integration uses [Gitleaks' maintained rules and Git scanning](https://github.com/gitleaks/gitleaks#commands) instead of copying those search strings.
+Ruleset version 1 has eight fixed IDs:
+
+| Rule ID | Candidate pattern, not validation |
+| --- | --- |
+| `private-key` | PEM/OpenSSH-style private-key headers and PGP private-key block headers. No decryption or key validation. |
+| `github-token` | Classic GitHub-style token prefixes and fine-grained token-shaped strings. |
+| `gitlab-token` | GitLab-style personal-access-token prefixes. |
+| `aws-access-key-id` | AKIA/ASIA-style identifiers. An identifier alone is not the secret key or proof of usable AWS access. |
+| `slack-token` | Selected Slack-style token prefixes. |
+| `credential-in-url` | Scheme URLs containing a username and password. |
+| `authorization-header` | Basic/Bearer credential-shaped header values. No decoding or validation. |
+| `credential-assignment` | Bounded literal password, token, API-key or secret-key assignments; selected exact placeholders and environment/template references are excluded. |
+
+Exact regexes and exclusions live in [git_secrets.py](../git_secrets.py), not a downloaded ruleset. Repository allow comments and suppression files do not disable detection. These are intentionally focused heuristics: there can be false positives and missed secrets, including unsupported providers/formats and encoded/encrypted data. No equivalence to Gitleaks or exhaustive credential coverage is claimed. Detection must be reviewed locally before remediation.
+
+### Bounds, isolation and evidence
+
+| Limit | Current value |
+| --- | --- |
+| Shared scan budget per repository | 60 seconds by default; `--git-scan-seconds` accepts greater than 0 through 3600 seconds |
+| Objects enumerated | 10,000, including trees |
+| Content per object | 2 MiB; oversized objects are not requested and coverage becomes partial |
+| Total object content read per repository | 64 MiB |
+| Each config file | 256 KiB |
+| Detection records per repository | 500, deduplicated by rule and line within each source |
+| Object-store entries checked | 50,000; unexpected nesting or filesystem transitions are rejected |
+
+Limits are enforced before unbounded capture; earlier findings survive budget exhaustion. Time is checked between filesystem operations, bounded inspections and pipe reads. Filesystem stalls, one bounded regex operation and up to a five-second stop/reap grace per reader can extend wall time beyond the scan budget. Git's internal memory use is not capped by the Python object-buffer limits. This is not a filesystem snapshot: use a controlled, preferably quiescent repository; the preflight link/scope checks do not eliminate concurrent path-replacement races.
+
+Git is launched through an isolated bare reader view containing generated metadata only. Its source object directory is explicitly selected, inherited Git/loader settings are not passed through, source-repository execution policy is not active, stderr is discarded, and protocols/lazy fetching are disabled. No hooks, filters, clone, fetch, remote search, credential validation or remediation is performed. Config parsing requests only storage-format fields without includes. Object bytes are analyzed in memory; no secret-bearing scratch report is written. Unconfirmed reader shutdown aborts the audit and retains generated reader metadata for local follow-up; see [operator handling](operations.md#scanner-failures-and-interruption).
+
+Exported detections contain fixed rule IDs, config/object locations, object IDs/types, line numbers and byte offsets. Raw secret values, matching lines, commit/tag text and author/email fields are excluded. A blob ID is not an original filename or a containing commit; those associations are not invented. Input repository paths remain operational metadata and should not contain credentials. See [the evidence contract](report-format.md#built-in-git-secret-evidence).
+
+If a finding is genuine, revoke/rotate the credential and investigate exposure. Removing a file or commit does not revoke it. No detections means only that the selected rules found no candidates within the completed scope.
 
 ## Cron and systemd timers
 
@@ -64,7 +97,7 @@ The module flags download-to-interpreter pipelines, network download tools, comm
 
 Literal absolute executable/script references receive bounded file inspection; binary executables receive metadata only. Dynamic paths, relative paths, shell expansions and arbitrary command arguments are not resolved. Job definitions and referenced scripts are checked for group/world write bits, unexpected owners and immediate parent-directory write permissions. Extended ACLs and all ancestor-directory rights are outside this module's permission checks.
 
-Systemd coverage includes up to 100 loaded system-manager timers (including inactive ones), active state, last/next realtime triggers where available, associated service user and suspicious patterns in effective `ExecStart`. Timer/service fragments, reported drop-ins and supported literal executable/script targets receive file inspection. Unsupported or escaped command serialization leaves explicit unknown target coverage. Shared script ownership is evaluated separately for each run-as UID. User-manager timers, unloaded/disabled units, transient pre/post commands without source fragments and recursive script/include chains need separate coverage.
+Systemd coverage includes up to 100 loaded system-manager timers (including inactive ones), active state, last/next realtime triggers where available, associated service user and suspicious patterns in effective `ExecStart`. Timer/service fragments, reported drop-ins and supported literal executable/script targets receive file inspection. Unsupported or escaped command serialization leaves explicit unknown target coverage. Shared script ownership is evaluated separately for each run-as UID. User-manager timers, unloaded/disabled units, transient pre/post commands without source fragments and recursive script/include chains need separate review.
 
 Limits are 500 inspected files and 256 KiB per text definition. Symlink paths, special files, oversized definitions, unreadable locations and exceeded limits remain explicit coverage issues. Raw command output is discarded after local analysis; a failed timer lookup does not appear as a clean result. Permission or syntax findings should be reviewed on the host before changing schedules.
 
@@ -72,7 +105,7 @@ Limits are 500 inspected files and 256 KiB per text definition. Symlink paths, s
 
 Audits detect command availability before launching a process. If the Docker CLI is absent from the audit PATH, Docker collection is **Skipped**, with the reason shown in HTML, text and JSON; no container inspection is attempted. This does not prove that no daemon exists (for example, a rootless or remote installation). An installed CLI with an inaccessible, stopped or unreachable daemon remains an **Unknown** finding. A reachable daemon with no containers is a successful, empty inventory.
 
-Missing optional firewall tools also show **Skipped**. If no kernel firewall backend can be inspected, overall filtering coverage remains **Unknown**. Required evidence tools still report unavailable coverage, and explicitly requested Git secret scans still report missing Gitleaks rather than silently skipping the request.
+Missing optional firewall tools also show **Skipped**. If no kernel firewall backend can be inspected, overall filtering coverage remains **Unknown**. Required evidence tools still report unavailable coverage, and explicitly requested Git secret scans still report missing Git rather than silently skipping the request.
 
 Docker checks run automatically for all containers, including stopped containers. Reports include:
 

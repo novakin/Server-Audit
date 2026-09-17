@@ -11,7 +11,7 @@ from accounts import collect as collect_accounts
 from command_runner import run
 from docker_audit import collect as collect_docker
 from env_files import collect as collect_env_files
-from git_secrets import collect as collect_git_secrets
+from git_secrets import SCAN_SECONDS, collect as collect_git_secrets
 from scheduled_tasks import collect as collect_scheduled_tasks
 
 
@@ -28,7 +28,7 @@ def summarize(checks):
     return findings
 
 
-def audit(connection=None, ssh_config=None, env_roots=None, git_roots=None):
+def audit(connection=None, ssh_config=None, env_roots=None, git_roots=None, git_scan_seconds=SCAN_SECONDS):
     report = {
         "schema_version": 1,
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -64,7 +64,7 @@ def audit(connection=None, ssh_config=None, env_roots=None, git_roots=None):
         checks["accounts"] = {"status": "error", "detail": str(error)}
     checks["environment_files"], env_findings = collect_env_files(env_roots, run, checks)
     findings.extend(env_findings)
-    checks["git_secrets"], git_findings = collect_git_secrets(git_roots)
+    checks["git_secrets"], git_findings = collect_git_secrets(git_roots, scan_seconds=git_scan_seconds)
     findings.extend(git_findings)
     checks["scheduled_tasks"], scheduled_findings = collect_scheduled_tasks(run)
     findings.extend(scheduled_findings)

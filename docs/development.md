@@ -4,7 +4,31 @@
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
+## Built-in local Git inspection — 2026-09-17
+
+Verification used Debian 13, Python 3.13.5 and the already installed Git 2.47.3, based on main commit `ab9af66215f3b66f2306f5a942c1641a6b546138`. Unchanged runtime modules, existing retained test files and the historical runner fixture were matched to GitHub blob identities. This was an isolated container, not a production audit or a fully booted systemd host.
+
+| Run | Result |
+| --- | --- |
+| Focused built-in detector, reader and pipeline suite | 61 passed; no skips. |
+| Complete changed suite | 153 discovered; 148 passed, 5 skipped; no failures. |
+| CLI help | Passed; includes `--git-scan-seconds` and built-in local-object scope. |
+
+```bash
+python3 -m unittest test_git_secrets test_git_reader test_git_audit -v
+python3 -m unittest discover -s . -p 'test_*.py' -v
+python3 audit.py --help
+```
+
+The five skips are the existing OpenSSH key-generation test (`ssh-keygen` absent) and four explicitly prepared native-lab tests. The old Gitleaks opt-in test is removed because that integration is removed, not because its skip gate was relaxed. Twenty-seven Gitleaks-specific tests (five scan tests, eleven scratch/process tests and eleven shutdown follow-up tests) are replaced by 61 focused tests for the new implementation. The four OS reliability tests and unrelated collector/export tests remain. No unchanged skip gate was broadened.
+
+Native Git fixtures exercise deleted historical secrets, packed/delta objects, unreachable loose objects, bare and SHA-256 repositories, commit/tag/config candidates, config includes and injected execution settings, partial clones with disabled fetching, corrupt/oversized objects, scope/byte/object/detection/time limits, source immutability, and exclusion of current working files. Reader tests exercise bounded pipes, nonzero/truncated output, shutdown/reap failures, second interruption, private workspace retention/cleanup and real SIGINT. The real denied-signal variant injects a `PermissionError`; its harness subsequently stops/reaps the child. It proves cancellation remains fatal, not that the auditor can override an actual kernel denial. Pipeline tests prevent final summary/export after fatal shutdown and check redaction, legacy rendering and CLI validation.
+
+No external probes, production host audits, installation, CI, packaging or deployment changes were performed. No Windows compatibility run, fully booted systemd validation or new browser visual review is claimed. HTML layout/rendering code are unchanged; the template's Git scope sentence is corrected and synthetic exports verify escaping, metadata, redaction and manifest completion. Previous native/browser validation below is historical, not fresh validation of this change. See [scope limits](audit-reference.md#git-secrets).
+
 ## Scanner shutdown failure follow-up — 2026-09-17
+
+Historical Gitleaks implementation record, superseded by the built-in implementation above. Commands and test names below describe that prior revision.
 
 Verified against branch baseline `796a1547f6fe723f7e7ecd6d2937523d4588b05f` in a Debian 13 Linux container with Python 3.13.5. All original runtime modules, the HTML template, test modules and the historical runner fixture were matched to their GitHub blob hashes before testing. Only `git_secrets.py` changes runtime behavior; the existing reliability mocks were adapted to explicit process/scratch ownership without removing assertions or broadening skip gates.
 
@@ -27,6 +51,8 @@ The new tests cover cancellation after shutdown/reaping errors, fatal timeout sh
 The six full-suite skips remain one native OpenSSH key-generation test (`ssh-keygen` absent), one opt-in real Gitleaks test, and four prepared-lab integration tests. Native IPv4/IPv6 loopback checks passed; public targets were mocked. No tools were installed, production host audits run, external targets probed, or CI/deployment changes made. Real Gitleaks/OpenSSH integration, visual browser review and fully booted systemd-host validation were not performed for this follow-up. Report schema, SSH fields, renderer/template and historical fixture remain unchanged. See [operator handling](operations.md#scanner-failures-and-interruption) for retained scratch.
 
 ## Reliability and SSH fixes — 2026-09-17
+
+Historical pre-replacement verification; see the current built-in Git record above.
 
 Local verification for the four review fixes used a Debian 13 Linux container with Python 3.13.5. This was not a fully booted systemd test host or a production audit. The original runtime files, template, test files and runner fixture were verified against GitHub blob identities at baseline `2f1a9d64d23dbb3c759d76c23a2e476cc8936c64` before applying changes.
 
@@ -56,13 +82,9 @@ python3 -m unittest test_docker_audit -q
 python3 -m unittest discover -s . -p 'test_*.py' -q
 ```
 
-For optional real scanner integration, provide an existing trusted executable. The test creates a disposable repository with fake credentials; do not use production keys.
+Native Git tests create disposable local repositories with synthetic candidates using an already installed `git` executable. They run automatically on POSIX when Git is available; no Gitleaks binary or `AUDIT_TEST_GITLEAKS_PATH` is used. Pure detector/CLI tests do not need Git. Do not download or add external tools merely to remove a skip: new integrations require prior explicit user approval under [AGENTS.md](../AGENTS.md#external-tool-approval).
 
-```bash
-AUDIT_TEST_GITLEAKS_PATH=/absolute/path/to/gitleaks python3 -m unittest test_git_secrets -q
-```
-
-The integration test is skipped when `AUDIT_TEST_GITLEAKS_PATH` is unset or the platform is not Linux. On Linux, a supplied nonexistent or unusable executable fails the test rather than skipping it. A green suite with skips is not equivalent to complete native validation. Do not download tools or change the host merely to make a skip disappear without an operational need.
+A green suite with skips is not complete native validation. Tests do not grant permission to run a production audit or probe external targets. Record the versions actually used and distinguish synthetic error injection from real permission failures.
 
 ## Test ownership
 
@@ -70,13 +92,14 @@ The integration test is skipped when `AUDIT_TEST_GITLEAKS_PATH` is unset or the 
 | --- | --- |
 | `test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `test_runner.py` and `fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
-| `test_reliability.py` | OS/scratch failures, evidence preservation and synthetic scanner timeout/interruption cleanup |
-| `test_scanner_shutdown.py` | Cancellation under shutdown failure, explicit scratch ownership and no completed export after abort |
+| `test_reliability.py` | Existing OS failure isolation and evidence preservation |
+| `test_git_reader.py` | Bounded pipes, safe metadata, shutdown/cancellation and native SIGINT |
+| `test_git_audit.py` | CLI budgets, failure propagation, no export on abort, redaction and legacy reports |
 | `test_ssh_evidence.py` | Attempted SSH scope, repeated values, additive compatibility and export/rendering |
 | `test_accounts.py` | Accounts, permissions, keys and observed usage |
 | `test_docker_audit.py` | Container projection, findings, absent CLI and daemon failures |
 | `test_env_files.py` | Metadata-only file handling, scope limits and application references |
-| `test_git_secrets.py` | Redaction, failures and opt-in real scanner integration |
+| `test_git_secrets.py` | Built-in rules, synthetic native Git storage, local-only scope, redaction and limits |
 | `test_scheduled_tasks.py` | Cron/timers, bounded reads, script references, ownership and redaction |
 | `test_reporting.py` | Rendering, escaping, permissions, completion manifests and CLI output |
 | `test_live_integrations.py` | Opt-in disposable-lab SSH, Docker, firewall and socket checks; see [fixture contract](live-validation.md#repeatable-live-test-fixture-contract) |
