@@ -16,13 +16,13 @@ umask 077
 lab=/opt/lab
 results=/results
 marker=/run/server-security-audit-integration-lab
-keys=/root/.ssh/authorized_keys
+keys=/opt/lab/authorized_keys
 image=server-audit-integration:local
 nft_table=server_audit_integration
 iptables_chain=AUDIT_INTEGRATION
 sshd_pid=''
-created_lab=0 created_results=0 created_marker=0 created_keys=0
-created_ssh_dir=0 created_run_sshd=0 created_policy=0
+created_lab=0 created_results=0 created_marker=0
+created_run_sshd=0 created_policy=0
 created_image=0 created_web=0 created_stopped=0 created_nft=0 created_iptables=0
 
 # The audit's Docker collector explicitly uses this local socket too.
@@ -73,8 +73,6 @@ cleanup() {
         done
     fi
     ((created_marker)) && cleanup_command rm -- "$marker"
-    ((created_keys)) && cleanup_command rm -- "$keys"
-    ((created_ssh_dir)) && cleanup_command rmdir /root/.ssh
     ((created_run_sshd)) && cleanup_command rmdir /run/sshd
     ((created_policy)) && cleanup_command rm -- /usr/sbin/policy-rc.d
     ((created_results)) && cleanup_command rm -rf -- "$results"
@@ -120,11 +118,10 @@ fi
 
 mkdir "$lab"; created_lab=1
 mkdir "$results"; created_results=1
-if [[ ! -d /root/.ssh ]]; then mkdir -m 700 /root/.ssh; created_ssh_dir=1; fi
 if [[ ! -d /run/sshd ]]; then mkdir -m 755 /run/sshd; created_run_sshd=1; fi
 ssh-keygen -q -t ed25519 -N '' -f "$lab/host_key"
 ssh-keygen -q -t ed25519 -N '' -f "$lab/client_key"
-cp "$lab/client_key.pub" "$keys"; created_keys=1
+cp "$lab/client_key.pub" "$keys"
 chmod 600 "$keys"
 printf '[127.0.0.1]:22222 %s\n' "$(cat "$lab/host_key.pub")" > "$lab/known_hosts"
 cat > "$lab/sshd_config" <<'CONFIG'
@@ -132,7 +129,7 @@ Port 22222
 ListenAddress 127.0.0.1
 HostKey /opt/lab/host_key
 PidFile /opt/lab/sshd.pid
-AuthorizedKeysFile /root/.ssh/authorized_keys
+AuthorizedKeysFile /opt/lab/authorized_keys
 PermitRootLogin prohibit-password
 AuthenticationMethods publickey
 PubkeyAuthentication yes
