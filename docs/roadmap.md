@@ -1,12 +1,14 @@
 # Server-Audit roadmap
 
-[Documentation index](../README.md) · Reviewed 2026-09-17
+[Documentation index](../README.md)
+
+Last substantive update: 2026-09-18 (Europe/Berlin).
 
 ## Objective and approval boundary
 
 Make the existing read-only auditor reliable to run, accurate to interpret and straightforward to validate. Preserve the explicit runner, focused collectors and offline reports until a concrete requirement justifies a change.
 
-The approved implementation scope is **R1–R4, G1 and the separately approved L1 layout change below, with tests and owning documentation**. The roadmap itself is a reviewed plan, not authorization to implement its other entries. CI, packaging, additional checks and broader hardening remain unapproved proposals. New external-tool integrations require explicit approval before implementation; see [AGENTS.md](../AGENTS.md#external-tool-approval). No target dates, budgets, operational owners or release commitments have been assigned.
+The recorded deliveries below cover R1–R4, G1, L1 and the separately approved CI work. The roadmap describes direction and conditional opportunities; [GitHub Issues](https://github.com/novakin/Server-Audit/issues) own current actionable work, scope approval and dependencies. This document does not authorize implementation of other entries. Packaging, additional checks and broader hardening remain separate proposals. New external-tool integrations require explicit approval before implementation; see [AGENTS.md](../AGENTS.md#external-tool-approval). No target dates, budgets, operational owners or release commitments have been assigned.
 
 ## Merged delivery: four fixes
 
@@ -29,17 +31,24 @@ Acceptance: inspect config and locally stored blob/commit/tag bytes, including p
 
 ## L1 — Approved repository layout
 
-Status: implemented and locally tested on the reorganisation branch; merge and deployment are separate. Keep the two launchers at root; move runtime into `server_audit/`, checks into `server_audit/collectors/`, the template into `server_audit/templates/`, and tests/fixtures into `tests/`. Retain the explicit runner, approval policy and copy-and-run operation. No new dependency, installer, CI, generic utility layer or behavioural feature is approved by this change.
+Status: merged in [PR #4](https://github.com/novakin/Server-Audit/pull/4), commit `c5b8a655667187847fe083578361de3ac71291c7`. Deployment remains separate. Keep the two launchers at root; move runtime into `server_audit/`, checks into `server_audit/collectors/`, the template into `server_audit/templates/`, and tests/fixtures into `tests/`. Retain the explicit runner, approval policy and copy-and-run operation. The layout change itself approved no new dependency, installer, CI, generic utility layer or behavioural feature; later CI approval is recorded separately below.
 
-Acceptance: all previous test cases and skip gates retained; unchanged fixture/template bytes and deterministic JSON/text/HTML; both launchers and offline companion operations work from a runtime-only copy in another directory; user-relative paths preserved; module/mock/subprocess imports, agent guidance, runtime file lists and local documentation links updated. See [layout decision](architecture.md#decision-runtime-package-and-test-layout), [tests](../tests/test_layout.py) and [verification](development.md#package-layout-verification--2026-09-17). D1 distribution automation remains a separate proposal; a packaging smoke test does not authorise a release pipeline.
+Original layout acceptance: all previous test cases and skip gates retained; unchanged fixture/template bytes and deterministic JSON/text/HTML; both launchers and offline companion operations work from a runtime-only copy in another directory; user-relative paths preserved; module/mock/subprocess imports, agent guidance, runtime file lists and local documentation links updated. See [layout decision](architecture.md#decision-runtime-package-and-test-layout), [tests](../tests/test_layout.py) and [verification](development.md#package-layout-verification--2026-09-17). D1 distribution automation remains a separate proposal; a packaging smoke test does not authorise a release pipeline.
+
+## V1 — Delivered CI and current follow-up entry points
+
+The original one-job CI proposal was implemented in [PR #7](https://github.com/novakin/Server-Audit/pull/7). [PR #10](https://github.com/novakin/Server-Audit/pull/10) added the separately approved Ubuntu lab job after successful routine tests. Both are merged; a workflow is not proof of mandatory merge enforcement or deployment. The [development guide](development.md#continuous-integration) owns current operation and the [dated Ubuntu review](reviews/2026-09-18-ubuntu-ci-hardening.md) preserves revision-specific acceptance and hardening evidence.
+
+[PR #6](https://github.com/novakin/Server-Audit/pull/6) also merged the subsequent Git coverage/configuration/reference-boundary corrections, identifying detection behavior as ruleset 2. The original G1 rationale above remains historical delivery context; the [audit reference](audit-reference.md#git-secrets) owns current behavior.
+
+Concrete follow-ups have one authoritative record each: [reboot-marker error isolation, #11](https://github.com/novakin/Server-Audit/issues/11), [ordinary-command output bounding, #12](https://github.com/novakin/Server-Audit/issues/12), and [required-check administration, #13](https://github.com/novakin/Server-Audit/issues/13). Read those Issues for current status, approval and dependencies; do not infer permission from this list. Recording or linking them does not implement their changes.
 
 ## Recommended next: separate approval required
 
-Priority here is sequencing, not security severity. V1 and V2 are independent; neither needs a plugin system, release pipeline or new testing framework.
+Priority here is sequencing, not security severity. V2 is broader than the four Ubuntu native integrations already delivered; neither CI success nor this roadmap claims systemd/journal coverage that was not exercised.
 
 | ID / status | Smallest useful scope | Start condition | Done when |
 | --- | --- | --- | --- |
-| V1 — Proposed next | One Linux CI job using one explicit Python version and the existing unittest command. | Approval to add a test workflow; select its tested Python baseline and required native tools. | PRs/main pushes produce commit-linked results; an intentional failing assertion fails the job. Use read-only repository permissions, reviewed pinned action revisions, nonpersistent checkout credentials and a timeout. Disclose optional skips. No production credentials, host audits, external probes, deployment or report uploads. |
 | V2 — Proposed next validation | A repeatable run on a disposable, fully booted Ubuntu/Debian systemd host for services, timers, EnvironmentFiles and journal-based key use. | An explicitly authorized disposable environment is available. | Record exact versions, sanitized fixtures, results and gaps for native serialization and key-use correlation. Do not represent one host as a distribution support matrix. Existing [lab limits](live-validation.md#remaining-limits) remain open until this is done. |
 | H1 — Superseded by G1 | Gitleaks report ingestion is removed; the new local reader bounds data before capture. | Covered by the approved G1 scope, not a separate scanner integration. | Byte/object/detection/time limits and partial-result tests pass. Native Git internal memory is not claimed to be capped. |
 
@@ -70,6 +79,6 @@ A trigger initiates a decision; it does not approve an architecture. CI and dist
 
 ## Review and maintenance
 
-Self-review completed against the code, report contract, active instructions and recorded verification. The plan separates approved fixes from proposals, gives each active/candidate item an acceptance boundary, distinguishes local testing from native validation, preserves privacy/compatibility and removes invented dates or automatic commitments. This is planning review, not an independent security assessment or a guarantee of future outcomes.
+The linked records distinguish approved deliveries, proposals and verification limits. A documentation update is not an independent security assessment or a fresh runtime validation. Review scope and source revision belong in the change PR; avoid an undated blanket acceptance claim here.
 
-Maintain this one roadmap. When approving an item, record its owner if assigned, status, linked PR and verification evidence; mark Done only after the accepted change is merged, and track deployment separately. Review priorities after R1–R4 rather than automatically starting every candidate. `AGENTS.md` remains authoritative for agent behavior; detailed runtime facts belong in the linked owning guides.
+Keep this roadmap focused on direction, conditional triggers and linked delivery rationale. Actionable work belongs in Issues; approvals, owners when assigned, blockers and verified resolution belong there, not in a second status table. A completed code fix requires its accepted merge/evidence; deployment and repository administration require their own verification. Reassess priorities instead of automatically starting every candidate. `AGENTS.md` remains authoritative for agent behavior; detailed runtime facts belong in the linked owning guides.

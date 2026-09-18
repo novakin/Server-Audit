@@ -1,11 +1,22 @@
 ## Change
-What changed and why? Identify anything deliberately outside scope.
+What changed, why, and what is deliberately outside scope?
+Related issue(s): [links, or none; a small standalone edit need not have an issue].
 
 ## Verification
-Commands or CI run, tested revision, results and skip reasons. State what remains unverified; do not reuse results from older code.
+Reviewed head: [SHA]. CI-tested revision/run: [SHA and link].
+Checks actually performed, concise results, failures/skips and remaining limits.
+Author self-review: [no in-scope blockers / changes required / verification incomplete].
+Reassess relevant changes after edits; older results retain their original scope.
 
 ## Documentation impact
-Updated: [files/sections]. Or: No update needed because [specific reason]. Review affected examples, links and summaries as well as the owning guide.
+- Owning guidance: [updated files/sections, or specific no-impact reason]
+- Related statements checked: [relevant summaries, roadmap and agent instructions]
+- Decision/changelog impact: [owning records updated, or not applicable and why]
+- Review basis/gaps: [scope/final diff; refer to revision above; unresolved inconsistencies or unavailable evidence]
+- Substantive review record: [path, or not required; no duplicate report by default]
 
 ## Risks and follow-up
-Known limitations, unresolved blockers and required operator action. Distinguish a proposed change from a merged or deployed change.
+In-scope blockers: [none, or details]. Out-of-scope work: [Issue links, or none].
+Approval/dependencies and required operator/admin actions: [details, or none].
+Distinguish publication, merge, settings verification and deployment. Use closing
+keywords only for Issues fully resolved by this merge; tracking is not approval.
