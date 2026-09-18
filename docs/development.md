@@ -36,7 +36,7 @@ Do not run a test by its file path as a standalone script, or use bare former mo
 | `tests/test_layout.py` | Runtime-only copy, lazy initializers, thin-launcher exit codes, caller-relative paths and no-network companion operations |
 | `tests/test_audit.py` | Command failures, network/SSH policy, optional-tool detection and orchestration behavior |
 | `tests/test_runner.py` and `tests/fixtures/audit-contract.json` | Existing report shape and ordered command contract, with explicit intentional deltas |
-| `tests/test_reliability.py` | Existing OS failure isolation and evidence preservation |
+| `tests/test_reliability.py` | OS/reboot inspection failures, evidence preservation and interruption propagation |
 | `tests/test_git_reference_boundaries.py` | Literal/reference exclusions, multiline/comment boundaries, per-line deduplication and loose/packed SHA-1/SHA-256 cases |
 | `tests/test_git_regressions.py` | Missing/unreadable primary config, storage-format integration, preserved findings and representative redacted exports |
 | `tests/test_git_pack.py` | Native packed-storage failures, evidence preservation and redaction |

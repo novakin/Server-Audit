@@ -20,6 +20,8 @@ Runtime collectors and their domain helpers are under `server_audit/collectors/`
 
 Missing commands, denied access and timeouts are reported explicitly. Missing optional firewall tools and Docker remain visible in evidence without creating individual findings. If no kernel firewall backend can be inspected, a consolidated unknown finding is emitted. Permission failures remain findings. Available updates and failed services produce review findings. Summary counts are not a security score.
 
+The reboot-required check inspects metadata at `/var/run/reboot-required`, without reading its contents, creating it or removing it. Presence produces a Review finding; absence only means no marker was found. Inspection failures produce an `error` check and one Unknown finding while unrelated collection continues. Successful results retain the existing `"True"`/`"False"` output strings; a failed inspection retains `detail` and omits `output`. See [check statuses](report-format.md#check-statuses).
+
 Text output limits command evidence sections to 80 lines; structured inventories are shown in full. JSON preserves collected evidence. Host inspection commands have a 30-second timeout each and resolve through standard system directories, including `/usr/local/bin`. Optional local Git inspection has a shared per-repository budget described below.
 
 ## Environment files and application sources

@@ -1,5 +1,6 @@
 """Shared synthetic host fixtures; no real host collection."""
 
+import os
 from unittest.mock import patch
 
 from server_audit import audit_runner
@@ -9,8 +10,11 @@ class HostPath:
     def __init__(self, value):
         self.value = value
 
-    def exists(self):
-        return True
+    def __str__(self):
+        return self.value
+
+    def stat(self):
+        return os.stat_result((0,) * 10)
 
     def read_text(self):
         return 'ID=debian\nVERSION_ID=12\n'
