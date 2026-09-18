@@ -38,9 +38,18 @@ def collect_apt_metadata():
 
 
 def collect_reboot_state():
-    check = {"status": "ok", "output": str(Path("/var/run/reboot-required").exists())}
+    try:
+        # Unlike exists(), stat() does not suppress inspection errors.
+        Path("/var/run/reboot-required").stat()
+    except FileNotFoundError:
+        required = False
+    except OSError as error:
+        return {"status": "error", "detail": str(error)}, []
+    else:
+        required = True
+    check = {"status": "ok", "output": str(required)}
     findings = []
-    if check["output"] == "True":
+    if required:
         findings.append({"level": "REVIEW", "message": "System reports a reboot is required."})
     return check, findings
 
