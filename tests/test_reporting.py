@@ -3,6 +3,7 @@ import copy
 import io
 import json
 import os
+import re
 import stat
 import tempfile
 import unittest
@@ -28,6 +29,17 @@ def sample_report():
 
 
 class ReportingTests(unittest.TestCase):
+    def test_report_prose_has_no_character_width_caps(self):
+        # Source-level regression guard; layout and interaction need browser review.
+        rendered = reporting.render_html(sample_report())
+        stylesheet = rendered.split('<style>', 1)[1].split('</style>', 1)[0]
+        prose_selectors = {'p', '.intro', '.limitations'}
+        for selectors, declarations in re.findall(r'([^{}]+)\{([^{}]*)\}', stylesheet):
+            affected = prose_selectors.intersection(part.strip() for part in selectors.split(','))
+            if affected:
+                with self.subTest(selectors=sorted(affected)):
+                    self.assertNotRegex(declarations, r'\bmax-width\s*:\s*[\d.]+ch\b')
+
     def test_text_report_preserves_sections_before_and_after_raw_output(self):
         report = {'host': 'fixture', 'timestamp_utc': 'fixed', 'summary': {'REVIEW': 1, 'UNKNOWN': 0},
                   'findings': [{'level': 'REVIEW', 'message': 'Review fixture.'}],
