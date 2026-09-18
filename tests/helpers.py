@@ -9,8 +9,9 @@ class HostPath:
     def __init__(self, value):
         self.value = value
 
-    def exists(self):
-        return True
+    def stat(self):
+        # The reboot check only needs the metadata lookup to succeed.
+        return None
 
     def read_text(self):
         return 'ID=debian\nVERSION_ID=12\n'

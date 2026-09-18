@@ -18,5 +18,6 @@ results belong in the linked PRs and dated reviews.
 
 ### Fixed
 
+- Reboot-marker inspection failures now retain explicit error/Unknown evidence and allow unrelated collection to continue, rather than aborting the audit or appearing as an absent marker ([Issue #11](https://github.com/novakin/Server-Audit/issues/11)). Successful results and report schema are unchanged.
 - HTML report text uses its available section width, including Scope & limitations. Narrow/enlarged layouts reflow, evidence keyboard focus is visible, direct evidence fragments open their panels, and printed headings stay together ([Issue #17](https://github.com/novakin/Server-Audit/issues/17)). Evidence and report schemas are unchanged.
 - Git scan coverage reporting for missing primary configuration, valid Git boolean metadata, and overbroad credential-reference exclusions, including multiline continuations. Detector ruleset 2 identifies the behavior change; report schema remains unchanged ([PR #6](https://github.com/novakin/Server-Audit/pull/6)).
