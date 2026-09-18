@@ -32,7 +32,7 @@ class LiveIntegrationTests(unittest.TestCase):
         self.assertEqual(matched['selected_settings']['passwordauthentication'], 'no')
         self.assertEqual(Path('/results/ssh-client.txt').read_text(), 'audit-live-ssh-ok')
         self.assertIn('Accepted publickey for root', Path('/results/sshd.log').read_text())
-        inventory = accounts.key_inventory(Path('/root/.ssh/authorized_keys'), run)
+        inventory = accounts.key_inventory(Path('/run/server-security-audit-authorized_keys'), run)
         self.assertEqual(inventory['status'], 'ok')
         self.assertEqual(len(inventory['keys']), 1)
         self.assertTrue(inventory['keys'][0]['fingerprint'].startswith('SHA256:'))
