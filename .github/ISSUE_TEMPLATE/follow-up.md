@@ -1,26 +1,32 @@
 ---
 name: Finding or follow-up
-about: Track a concrete defect, hardening proposal or project action
+about: Track a bug, enhancement, documentation or maintenance task
+assignees: novakin
 ---
 
+<!--
+Check for an existing Issue first. Use the repository's approved category
+and useful approval/blocker flags in GitHub, not duplicated owner/label prose.
+Use sanitized evidence; do not include credentials or full host reports.
+Assignment and labels do not authorize implementation.
+Replace the prompts and checklist with task-specific content; omit inapplicable fields.
+-->
+
 ## Problem and evidence
-Source review/PR and reviewed revision:
-Observed versus expected behavior; bounded synthetic reproducer when applicable:
+Problem or desired outcome (for bugs, observed versus expected behavior):
+Evidence/context: source review, revision, environment or reproducer where relevant.
 Impact and verification limits:
 
-## Proposed scope and approval
-Smallest useful correction or investigation:
+## Scope and approval
+Smallest useful change or investigation:
 Explicitly outside scope:
-Approval required, or existing user/maintainer authorization and its source:
-An issue or missing label is not approval to implement.
+Implementation approval: pending, or approved scope with its source.
 
 ## Acceptance criteria
-- [ ] Observable outcome
-- [ ] Relevant regression/native or administrative verification
-- [ ] Affected documentation updated where applicable
+- [ ] Specific, observable outcome.
+- [ ] Relevant verification completed.
+- [ ] Affected documentation updated, or no impact explained.
 
 ## Dependencies and resolution
-Blocker or related PR/Issue, if any:
-Owner and date: only if actually assigned; otherwise unassigned.
-Close as completed only after the full acceptance boundary is met. State a
-not-planned decision explicitly; do not confuse it with implemented resolution.
+Dependencies or blockers and the unblocking condition, if any:
+Related implementation PR or evidence, when available:
