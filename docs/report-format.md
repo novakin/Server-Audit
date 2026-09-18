@@ -36,6 +36,12 @@ For example, `port 22` followed by `port 2222` retains legacy `selected_settings
 
 Consumers needing all values should prefer the new map. For older reports without it, inspect raw output rather than assuming the legacy scalar is complete. Old reports still render. New text reports add scope lines before SSH raw evidence; HTML exposes the additive fields in collected evidence. The general SSH limitation now describes the selected on-disk configuration, not unconditionally the installed default. No evidence establishes what configuration the running daemon loaded.
 
+## Account permission evidence
+
+Entries in `checks.accounts.accounts[].permissions` retain `path`, `mode`, `owner_uid`, `symlink` and Boolean `unsafe` when metadata is available. For ordinary files/directories, `unsafe` still flags an owner other than root/the account or group/other write bits. For `symlink: true`, it evaluates **link ownership only**, not mode bits or target access. An additional `unknown` explanation identifies uninspected target permissions; `unsafe: false` is not a safe-target verdict. The collector emits an Unknown finding for that uncertainty and a separate ownership-specific Review finding when needed. Identical repeated symlink records retain their evidence but do not repeat their findings within one account.
+
+A failed metadata lookup retains `path` and `unknown` rather than inventing a mode or `unsafe` value. The account collection status remains `ok` for a collected inventory with nested uncertainty; read its findings and permission records. Schema version 1 and existing field types are unchanged. Older reports retain their original findings when rendered; only a new audit uses the corrected interpretation. See [account scope](audit-reference.md#accounts-access-and-ssh-keys).
+
 ## Built-in Git secret evidence
 
 `checks.git_secrets` retains the `status`, `repositories` and `limitations` containers. The additive `detector: "builtin"`, `ruleset_version: 2`, `rule_ids` and `limits` identify the implementation and selected bounds even when the check is not requested. A requested scan without the approved local Git reader is `unavailable`, not a clean or skipped scan.
