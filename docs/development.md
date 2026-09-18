@@ -115,11 +115,13 @@ During authorized repository work, proactively create or update a concrete actio
 
 #### Issue metadata
 
-For this repository, new agent-created Issues default to **`novakin`**, unless the user specifies otherwise. Preserve existing deliberate assignments. Assignees own triage/follow-through, not automatic approval or a deadline. Keep ownership and category in GitHub's **Assignees** and **Labels** fields; do not mirror them in mutable body text. Record a target date only when actually agreed.
+For this repository, new agent-created Issues and pull requests default to **`novakin`**, unless the user specifies otherwise. Preserve existing deliberate assignments. Assignees own triage/follow-through, not automatic approval or a deadline. Keep ownership and category in GitHub's **Assignees** and **Labels** fields; do not mirror them in mutable body text. Record a target date only when actually agreed.
 
-The single Markdown template sets `assignees: novakin` for submissions using that template. API-created Issues must explicitly pass `assignees: ["novakin"]` and the selected labels. Blank submissions or other integrations are not covered by this default. No assignment bot or additional workflow is configured.
+The single Markdown Issue template sets `assignees: novakin` for submissions using that template. API-created Issues must explicitly pass `assignees: ["novakin"]` and the selected labels. Blank Issues and PRs created outside the agent workflow are not automatically assigned by this policy. No assignment bot or additional workflow is configured.
 
-Normally choose one primary category:
+For an agent-created PR, populate the existing [PR template](../.github/pull_request_template.md), then apply the selected assignee through GitHub's [issue-assignee API](https://docs.github.com/en/rest/issues/assignees), which also manages PR assignees. Apply the appropriate existing category label and verify the resulting metadata. PR templates populate descriptions, not assignees; do not add assignment front matter or another template.
+
+Normally choose one primary category for an Issue or PR:
 
 | Label | Use |
 | --- | --- |
@@ -132,7 +134,7 @@ Optional flags are **`needs-approval`** for a pending implementation/scope decis
 
 Reuse these approved names; do not expand the vocabulary with a status ladder or a `development` label, or add a project board. Use open/closed state and PR relationships for progress. Do not delete other existing repository labels merely because they are outside this convention. The generic template does not force a category; web submissions can be classified during triage.
 
-Read current metadata before changing it. Prefer additive assignment/label actions; replacement APIs must retain unrelated values. Confirm the write response or read back the Issue: requested metadata can be omitted when access is insufficient. If label listing or application is unavailable, disclose that specific gap rather than invent a catalogue or claim success. See GitHub's [template defaults](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository) and [Issue API](https://docs.github.com/en/rest/issues/issues).
+Read current metadata before changing it. Prefer additive assignment/label actions; replacement APIs must retain unrelated values. Confirm the write response or read back the Issue or PR: requested metadata can be omitted when access is insufficient. If label listing or application is unavailable, disclose that specific gap rather than invent a catalogue or claim success. See GitHub's [template defaults](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository) and [Issue API](https://docs.github.com/en/rest/issues/issues).
 
 #### PR links and resolution
 
