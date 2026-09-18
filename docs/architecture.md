@@ -1,6 +1,8 @@
 # Architecture and extension guide
 
-[Documentation index](../README.md) · Internal engineering documentation · Reviewed 2026-09-17
+[Documentation index](../README.md) · Internal engineering documentation
+
+Last substantive update: 2026-09-18 (Europe/Berlin).
 
 Use this guide when changing collection behavior or adding an audit. Keep ownership explicit and preserve the report contract.
 
@@ -106,7 +108,7 @@ Native interfaces: [Git cat-file](https://git-scm.com/docs/git-cat-file), [Git c
 
 ## Decision: runtime package and test layout
 
-Status: approved and implemented on the reorganisation branch, 2026-09-17; merge and deployment remain separate. The root mixed runtime code, test modules and presentation assets. The user approved separating them without changing audit behaviour or introducing dependencies.
+Status: the approved reorganisation was merged in [PR #4](https://github.com/novakin/Server-Audit/pull/4), commit `c5b8a655667187847fe083578361de3ac71291c7`, on 2026-09-17 (Europe/Berlin). This is merge evidence, not a deployment claim; the original decision rationale follows. The root mixed runtime code, test modules and presentation assets. The user approved separating them without changing audit behaviour or introducing dependencies.
 
 Runtime lives in `server_audit/`; `collectors/` holds checks and their focused helpers, and `templates/` holds the offline template. The root `audit.py` and `external_probe.py` only import and call their respective `main` functions. Package initializers have no eager imports. Tests live in the ordinary `tests` package; shared host fixtures moved to `tests/helpers.py` and the historical JSON moved unchanged to `tests/fixtures/audit-contract.json`.
 
