@@ -12,9 +12,15 @@ from pathlib import Path
 def permission_info(path, uid):
     try:
         info = path.lstat()
-        return {"path": str(path), "mode": oct(stat.S_IMODE(info.st_mode)),
-                "owner_uid": info.st_uid, "symlink": stat.S_ISLNK(info.st_mode),
-                "unsafe": info.st_uid not in (0, uid) or bool(info.st_mode & 0o022)}
+        symlink = stat.S_ISLNK(info.st_mode)
+        unsafe = info.st_uid not in (0, uid)
+        if not symlink:
+            unsafe = unsafe or bool(info.st_mode & 0o022)
+        result = {"path": str(path), "mode": oct(stat.S_IMODE(info.st_mode)),
+                  "owner_uid": info.st_uid, "symlink": symlink, "unsafe": unsafe}
+        if symlink:
+            result["unknown"] = "Symbolic-link target permissions not inspected; link mode bits do not establish target access."
+        return result
     except OSError as error:
         return {"path": str(path), "unknown": str(error)}
 
@@ -137,8 +143,17 @@ def collect(run, ssh_output=""):
                         findings.append({"level": "REVIEW", "message": f"{user.pw_name}: weak/obsolete key {fingerprint} ({key['type']}, {key['bits']} bits)."})
                 else:
                     findings.append({"level": "UNKNOWN", "message": f"{user.pw_name}: could not validate key at {path}:{key['line']}."})
+        reported_symlinks = []
         for permission in account["permissions"]:
-            if permission.get("unsafe"):
+            if permission.get("symlink"):
+                # Multiple key files can share the same parent-link evidence.
+                if permission in reported_symlinks:
+                    continue
+                reported_symlinks.append(permission)
+                findings.append({"level": "UNKNOWN", "message": f"{user.pw_name}: {permission['path']}: {permission['unknown']}"})
+                if permission["unsafe"]:
+                    findings.append({"level": "REVIEW", "message": f"{user.pw_name}: unexpected owner UID {permission['owner_uid']} on symbolic link {permission['path']}."})
+            elif permission.get("unsafe"):
                 findings.append({"level": "REVIEW", "message": f"{user.pw_name}: unexpected owner or group/other write permission on {permission['path']} ({permission['mode']})."})
         accounts.append(account)
     for fingerprint, owners in fingerprints.items():
@@ -164,6 +179,6 @@ def collect(run, ssh_output=""):
                 "Password lock is not account disablement: SSH keys may still work. chage describes local shadow expiry; directory/PAM policies may differ.",
                 "Sudo evidence comes from sudo -l; denied policies and lookup errors retain their native status. Group names alone do not prove all effective privileges.",
                 "Key paths use the selected sshd output, or conventional defaults if unavailable. Per-user/address Match rules, AuthorizedKeysCommand, trusted CAs and certificates require separate review.",
-                "Permissions cover home, key parent and key file mode/owner, not ACLs or all ancestor directories. Symlink key paths are skipped.",
+                "Permissions cover home, key parent and key file mode/owner, not ACLs or all ancestor directories. Symlink mode bits are not target permissions; target access remains unverified. Symlink key paths are skipped.",
                 "Last observed key use comes only from visible retained journal entries. No match means unknown, never unused. lastlog may be missing or incomplete and is account-level, not key-level.",
             ]}, findings
