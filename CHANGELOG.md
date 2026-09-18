@@ -18,4 +18,5 @@ results belong in the linked PRs and dated reviews.
 
 ### Fixed
 
+- HTML report text uses its available section width, including Scope & limitations. Narrow/enlarged layouts reflow, evidence keyboard focus is visible, direct evidence fragments open their panels, and printed headings stay together ([Issue #17](https://github.com/novakin/Server-Audit/issues/17)). Evidence and report schemas are unchanged.
 - Git scan coverage reporting for missing primary configuration, valid Git boolean metadata, and overbroad credential-reference exclusions, including multiline continuations. Detector ruleset 2 identifies the behavior change; report schema remains unchanged ([PR #6](https://github.com/novakin/Server-Audit/pull/6)).
