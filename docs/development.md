@@ -109,11 +109,38 @@ repo:novakin/Server-Audit is:issue is:open
 repo:novakin/Server-Audit is:pr is:open
 ```
 
-Inspect each relevant item's body, substantive decisions, linked implementation and current checks before reporting it as approved, blocked, pending review/CI or resolved. An open Issue is not permission to implement; an absent label proves nothing. Use open/closed state and linked PRs, with existing category labels or optional `needs-approval`/`blocked` labels only when useful. No project board or parallel TODO/status file is required.
+Inspect each relevant item's body, substantive decisions, linked implementation and current checks before reporting it as approved, blocked, pending review/CI or resolved. For an inventory of Guillaume's work, add `assignee:novakin`; do not use that filter for a repository-wide inventory because it would hide unassigned or differently assigned work. An open Issue, assignment or absent label is not implementation approval.
 
-Record a substantive finding that survives the PR using the [follow-up template](../.github/ISSUE_TEMPLATE/follow-up.md): evidence/reproducer and reviewed revision, actual/expected behavior, impact/limits, smallest proposed scope, approval boundary and observable acceptance criteria. Do not invent owners or deadlines. Small standalone edits do not need a preliminary Issue. Creating a follow-up cannot turn an in-scope blocker into acceptance; fix it or keep the PR unready.
+During authorized repository work, proactively create or update a concrete actionable finding that will remain unresolved, unless the task restricts publication. Use the [follow-up template](../.github/ISSUE_TEMPLATE/follow-up.md) for evidence/context, actual versus expected behavior for defects, impact, smallest scope, approval source and observable acceptance criteria; include a bounded synthetic reproducer when relevant. Do not create an Issue for every observation, speculative improvement, small fix completed in the PR or ordinary CI failure being corrected there. Reuse an existing Issue. Recording work does not authorize implementation, remove an in-scope blocker or establish background monitoring.
 
-Use `Fixes #N` only when merging into the default branch satisfies the Issue's complete acceptance boundary. Use a non-closing reference such as `Related to #N` for partial work or separate settings/deployment/target-validation requirements. Auto-closing depends on repository settings and default-branch targeting; check the actual state rather than assuming closure. Closed as not planned is not completed; a closed unmerged PR is not delivered. An Issue records approval, material scope decisions and verified resolution; comments need not narrate every editing step.
+#### Issue metadata
+
+For this repository, new agent-created Issues default to **`novakin`**, unless the user specifies otherwise. Preserve existing deliberate assignments. Assignees own triage/follow-through, not automatic approval or a deadline. Keep ownership and category in GitHub's **Assignees** and **Labels** fields; do not mirror them in mutable body text. Record a target date only when actually agreed.
+
+The single Markdown template sets `assignees: novakin` for submissions using that template. API-created Issues must explicitly pass `assignees: ["novakin"]` and the selected labels. Blank submissions or other integrations are not covered by this default. No assignment bot or additional workflow is configured.
+
+Normally choose one primary category:
+
+| Label | Use |
+| --- | --- |
+| `bug` | Existing behavior violates an established requirement or documented contract. |
+| `enhancement` | New capability or improvement, including separately justified hardening. No separate feature/improvement labels. |
+| `documentation` | The main deliverable is guidance, examples or instructions; not every code change that also updates docs. |
+| `maintenance` | Tests, CI, repository settings or behavior-preserving internal upkeep. |
+
+Optional flags are **`needs-approval`** for a pending implementation/scope decision and **`blocked`** for a named prerequisite with an explicit unblocking condition. Ordinary queueing is not blocked. An agent's missing tool access is not automatically a blocker for the assigned maintainer. Record actual approval and its scope before removing `needs-approval`; remove `blocked` when its stated prerequisite is resolved. Neither absence of a flag nor assignment grants permission.
+
+Reuse these approved names; do not expand the vocabulary with a status ladder or a `development` label, or add a project board. Use open/closed state and PR relationships for progress. Do not delete other existing repository labels merely because they are outside this convention. The generic template does not force a category; web submissions can be classified during triage.
+
+Read current metadata before changing it. Prefer additive assignment/label actions; replacement APIs must retain unrelated values. Confirm the write response or read back the Issue: requested metadata can be omitted when access is insufficient. If label listing or application is unavailable, disclose that specific gap rather than invent a catalogue or claim success. See GitHub's [template defaults](https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository) and [Issue API](https://docs.github.com/en/rest/issues/issues).
+
+#### PR links and resolution
+
+Use GitHub's **Development** relationship for a PR that resolves the Issue. Prefer `Fixes #N` in the **PR description** when merging into the default branch will satisfy the complete acceptance boundary. Do not rely only on a branch name or a commit message to establish the PR relationship. Verify the actual link through an available API or UI; if only the reference was published, state that limitation.
+
+For partial work, historical evidence or separate settings/deployment/target-validation requirements, use a non-closing reference such as `Related to #N`. A plain reference is not a formal Development link; manually linked Development PRs can also auto-close Issues. Do not add a closing relationship merely to make the sidebar look complete. An Issue may span several PRs, and an administrative action need not have a PR at all.
+
+Before authorized merge, confirm the acceptance criteria and required evidence. After merge, check the Issue's actual state: auto-closing depends on default-branch targeting and repository settings. Close manually only when authorized and the full boundary is met. Closed as not planned is not completed; a closed unmerged PR is not delivered. Keep material approval, blocker and verified-resolution decisions in the Issue discussion without narrating every edit. See [GitHub linking semantics](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue).
 
 Keep one current acceptance record in the PR description, using the [PR template](../.github/pull_request_template.md): reviewed head, tested merge/revision, CI run and actual results, author self-review verdict, documentation impact and unresolved Issue links. Self-review is not independent approval. Use comments only for material findings, changed decisions or corrections of earlier acceptance. After further edits, reassess the relevant delta and identify the new evidence; older results retain their original scope.
 
