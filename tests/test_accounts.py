@@ -13,6 +13,9 @@ from server_audit.collectors import accounts
 from server_audit.command_runner import run
 from server_audit.reporting import account_text_report
 from server_audit.reporting import render_html
+from server_audit.reporting import render_text
+from server_audit import reporting
+from server_audit.collectors import ssh_audit
 
 
 class UsageTests(unittest.TestCase):
@@ -117,6 +120,118 @@ class ScopeTests(unittest.TestCase):
         html = render_html({'checks': {'accounts': check}, 'findings': findings})
         self.assertIn('user=alice,host=&lt;fixture&gt;', html)
         self.assertIn('key_path_scope', html)
+
+
+@unittest.skipUnless(platform.system() == 'Linux', 'Linux account database')
+class PrivilegeTests(unittest.TestCase):
+    def collect(self, users, concerns=False, failed_command=None, sudo_grants=True, privileged_groups=True):
+        calls = []
+        def command(argv):
+            calls.append(argv)
+            if argv[0] == failed_command:
+                return {'status': 'error', 'output': '', 'detail': 'Synthetic lookup failure'}
+            output = ''
+            if argv[0] == 'sudo' and sudo_grants:
+                output = f'User {argv[-1]} may run the following commands:\n    (ALL) NOPASSWD: ALL'
+            elif argv[0] == 'passwd':
+                output = f'{argv[-1]} {"NP" if concerns else "P"} synthetic-state'
+            elif argv[0] == 'chage':
+                output = 'Account expires : never'
+            return {'status': 'ok', 'output': output, 'detail': ''}
+        def inventory(path, runner):
+            keys = [{'line': 1, 'type': 'ssh-rsa', 'bits': 1024, 'fingerprint': 'SHA256:SyntheticRoot'},
+                    {'line': 2, 'type': 'unknown', 'bits': None}] if concerns else []
+            return {'path': str(path), 'status': 'ok' if concerns else 'absent', 'keys': keys}
+        def permission(path, uid):
+            if concerns and path.name == '.ssh':
+                return {'path': str(path), 'symlink': True, 'mode': '0777', 'owner_uid': uid,
+                        'unsafe': False, 'unknown': 'Synthetic link target permissions not inspected'}
+            return {'path': str(path), 'mode': '0770' if concerns else '0700',
+                    'owner_uid': uid, 'symlink': False, 'unsafe': concerns}
+        groups = [SimpleNamespace(gr_name='sudo', gr_gid=1234, gr_mem=[user.pw_name for user in users])]
+        if not privileged_groups:
+            groups = []
+        scope = {'status': 'ok', 'output': 'authorizedkeysfile .ssh/authorized_keys',
+                 'configuration_source': 'custom', 'configuration_path': '/synthetic/sshd_config',
+                 'connection_context': 'user=root'}
+        with patch('pwd.getpwall', return_value=users), patch('grp.getgrall', return_value=groups), \
+             patch.object(accounts.os, 'geteuid', return_value=0), \
+             patch.object(accounts, 'permission_info', side_effect=permission), \
+             patch.object(accounts, 'key_inventory', side_effect=inventory):
+            check, findings = accounts.collect(command, ssh_check=scope)
+        return check, findings, calls
+
+    def user(self, name='root', uid=0, shell='/bin/bash'):
+        return SimpleNamespace(pw_name=name, pw_uid=uid, pw_gid=uid, pw_dir=f'/synthetic/{name}', pw_shell=shell)
+
+    def test_normal_root_retains_complete_inventory_and_exports_without_generic_privilege_findings(self):
+        check, findings, calls = self.collect([self.user()])
+        self.assertEqual(findings, [])
+        root = check['accounts'][0]
+        self.assertEqual((root['user'], root['uid'], root['gid'], root['home'], root['shell']),
+                         ('root', 0, 0, '/synthetic/root', '/bin/bash'))
+        self.assertEqual(root['groups'], ['sudo'])
+        self.assertIn('NOPASSWD: ALL', root['sudo_policy']['output'])
+        self.assertEqual(root['password_state']['status'], 'ok')
+        self.assertIn('Account expires', root['password_and_account_expiry']['output'])
+        self.assertEqual(root['key_path_scope']['applicability'], 'selected_context')
+        self.assertEqual(root['key_files'][0]['status'], 'absent')
+        self.assertEqual(root['permissions'][0]['mode'], '0700')
+        self.assertEqual(check['key_usage']['status'], 'ok')
+        self.assertEqual(check['last_login']['status'], 'ok')
+        for executable in ('passwd', 'chage', 'sudo'):
+            self.assertTrue(any(argv[0] == executable and argv[-1] == 'root' for argv in calls))
+        report = {'schema_version': 1, 'host': 'synthetic', 'timestamp_utc': '2026-01-01T12:00:00+00:00',
+                  'checks': {'accounts': check}, 'findings': findings, 'summary': {'REVIEW': 0, 'UNKNOWN': 0}, 'limitations': []}
+        with tempfile.TemporaryDirectory() as directory:
+            folder = reporting.export_report(report, directory)
+            self.assertEqual(json.loads((folder / 'data/report.json').read_text()), report)
+            self.assertIn('NOPASSWD', (folder / 'report.html').read_text())
+        self.assertIn('root', render_text(report))
+        self.assertIn('NOPASSWD', account_text_report(check))
+
+    def test_only_exact_root_uid_zero_is_exempt_and_service_accounts_remain_visible(self):
+        for name, uid in (('root', 1001), ('administrator', 0), ('alice', 1001)):
+            with self.subTest(name=name, uid=uid):
+                check, findings, _ = self.collect([self.user(name, uid)])
+                self.assertTrue(any(f'Account {name} has sudo command grants.' in item['message'] for item in findings))
+                self.assertTrue(any(f'Account {name}: UID {uid}, privileged groups' in item['message'] for item in findings))
+                self.assertEqual(check['accounts'][0]['uid'], uid)
+        users = [self.user(), self.user('service-a', 1002, '/usr/sbin/nologin'), self.user('service-b', 1003, '/bin/false')]
+        check, findings, _ = self.collect(users)
+        self.assertEqual([item['shell'] for item in check['accounts']], [user.pw_shell for user in users])
+        for user in users[1:]:
+            self.assertTrue(any(f'Account {user.pw_name} has sudo command grants.' in item['message'] for item in findings))
+            self.assertTrue(any(f'Account {user.pw_name}: UID' in item['message'] for item in findings))
+
+    def test_nonroot_sudo_group_and_uid_privileges_remain_independent(self):
+        for uid, grants, groups, expected in ((1001, True, False, 'has sudo command grants'),
+                                              (1001, False, True, 'privileged groups'),
+                                              (0, False, False, 'UID 0')):
+            with self.subTest(uid=uid, sudo_grants=grants, privileged_groups=groups):
+                _, findings, _ = self.collect([self.user('administrator', uid)], sudo_grants=grants, privileged_groups=groups)
+                self.assertEqual(len([item for item in findings if item['level'] == 'REVIEW']), 1)
+                self.assertTrue(any(expected in item['message'] for item in findings))
+
+    def test_specific_root_concerns_and_collection_failures_are_not_exempt(self):
+        check, findings, _ = self.collect([self.user()], concerns=True)
+        messages = '\n'.join(item['message'] for item in findings)
+        for expected in ('has no password', 'weak/obsolete key', 'could not validate key',
+                         'group/other write permission', 'Synthetic link target permissions not inspected'):
+            self.assertIn(expected, messages)
+        self.assertEqual(len(check['accounts'][0]['key_files'][0]['keys']), 2)
+        self.assertNotIn('has sudo command grants', messages)
+        self.assertNotIn('privileged groups', messages)
+        _, ssh_findings = ssh_audit.ssh_findings('permitrootlogin yes')
+        self.assertTrue(any('permitrootlogin=yes' in item['message'] for item in ssh_findings))
+        fields = {'passwd': 'password_state', 'chage': 'password_and_account_expiry', 'sudo': 'sudo_policy'}
+        for executable in ('passwd', 'chage', 'sudo', 'journalctl', 'lastlog'):
+            with self.subTest(failed_command=executable):
+                check, findings, _ = self.collect([self.user()], failed_command=executable)
+                self.assertTrue(any(item['level'] == 'UNKNOWN' for item in findings))
+                if executable in fields:
+                    self.assertEqual(check['accounts'][0][fields[executable]]['status'], 'error')
+                self.assertEqual(len(check['accounts']), 1)
 
 
 @unittest.skipUnless(platform.system() == 'Linux', 'Linux ownership and OpenSSH integration')
