@@ -1,4 +1,4 @@
-"""Strict runner for the four prepared-lab tests; never provisions a host."""
+"""Strict runner for the five prepared-lab tests; never provisions a host."""
 
 import os
 import platform

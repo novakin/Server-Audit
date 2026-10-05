@@ -11,6 +11,7 @@ from unittest.mock import patch
 from server_audit.collectors import accounts
 from server_audit.command_runner import run
 from server_audit.collectors import docker_audit
+from server_audit.collectors import env_files
 from server_audit.collectors import network_audit
 from server_audit.collectors import ssh_audit
 
@@ -105,6 +106,38 @@ class LiveIntegrationTests(unittest.TestCase):
         self.assertEqual(len(ssh), 1)
         self.assertEqual(ssh[0]['binding'], 'loopback')
         self.assertIn('sshd', ssh[0]['process'])
+
+    def test_native_systemd_environment_wildcards_preserve_unknown_and_discovery(self):
+        unit = 'server-audit-environment-fixture.service'
+        evidence = run(['systemctl', 'show', '--no-pager', '--property=EnvironmentFiles', '--property=ActiveState', '--', unit])
+        self.assertEqual(evidence['status'], 'ok', evidence.get('detail'))
+        self.assertIn('ActiveState=inactive', evidence['output'])
+        self.assertIn('/opt/lab/*.env', evidence['output'], evidence['output'])
+        # Select the synthetic loaded unit; it was not started and is not a running-service claim.
+        checks = {'running_services': {'status': 'ok', 'output': unit},
+                  'docker': {'status': 'ok', 'containers': []}}
+        report, findings = env_files.collect(['/opt/lab'], run, checks)
+        source = report['applications']['sources'][0]
+        self.assertEqual(source['status'], 'partial', source)
+        patterns = {item['path']: item for item in source['files'] if item.get('status') == 'unknown'}
+        self.assertEqual(set(patterns), {'/opt/lab/*.env', '/opt/lab/missing-?.env', '/opt/lab/settings-[ab].conf'})
+        self.assertTrue(patterns['/opt/lab/*.env']['optional'])
+        self.assertFalse(patterns['/opt/lab/missing-?.env']['optional'])
+        self.assertTrue(patterns['/opt/lab/settings-[ab].conf']['optional'])
+        self.assertEqual(report['status'], 'partial')
+        files = {item['path']: item for item in report['files']}
+        literal_brackets = {'/opt/lab/' + name for name in ('settings[.conf', 'settings[].conf', 'settings[!].conf', 'settings[^].conf')}
+        literal_brackets.add('/opt/lab/dir[/settings].conf')
+        self.assertEqual(set(files), {'/opt/lab/literal.env', '/opt/lab/production.env'} | literal_brackets)
+        self.assertEqual(files['/opt/lab/literal.env']['applications'], ['systemd:' + unit])
+        for path in literal_brackets:
+            self.assertEqual(files[path]['applications'], ['systemd:' + unit])
+        self.assertNotIn('applications', files['/opt/lab/production.env'])
+        absent = next(item for item in report['skipped'] if item['path'] == '/opt/lab/absent-literal')
+        self.assertEqual(absent['reason'], 'Optional application file absent')
+        self.assertEqual(len([item for item in findings if item['level'] == 'UNKNOWN'
+                              and item['message'].startswith('EnvironmentFile reference')]), 3)
+        self.assertNotIn('PRIVATE_SENTINEL_ENV', json.dumps((report, findings)))
 
 
 if __name__ == '__main__':

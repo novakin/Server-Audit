@@ -19,6 +19,7 @@ ALLOWED_SKIPS = frozenset({
     'tests.test_live_integrations.LiveIntegrationTests.test_native_docker_projection_running_stopped_and_redaction',
     'tests.test_live_integrations.LiveIntegrationTests.test_native_firewall_rules_are_collected',
     'tests.test_live_integrations.LiveIntegrationTests.test_native_socket_owner_and_loopback_binding',
+    'tests.test_live_integrations.LiveIntegrationTests.test_native_systemd_environment_wildcards_preserve_unknown_and_discovery',
 })
 
 

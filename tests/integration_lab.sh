@@ -17,18 +17,20 @@ lab=/opt/lab
 results=/results
 marker=/run/server-security-audit-integration-lab
 keys=/run/server-security-audit-authorized_keys
+environment_unit=/run/systemd/system/server-audit-environment-fixture.service
 image=server-audit-integration:local
 nft_table=server_audit_integration
 iptables_chain=AUDIT_INTEGRATION
 sshd_pid=''
 created_lab=0 created_results=0 created_marker=0 created_keys=0
 created_run_sshd=0 created_policy=0
+created_environment_unit=0
 created_image=0 created_web=0 created_stopped=0 created_nft=0 created_iptables=0
 
 # The audit's Docker collector explicitly uses this local socket too.
 docker_executable=$(type -P docker) || { echo 'The disposable VM must already have Docker installed.' >&2; exit 2; }
 docker() { timeout 45 "$docker_executable" --host unix:///var/run/docker.sock "$@"; }
-for path in "$lab" "$results" "$marker" "$keys"; do
+for path in "$lab" "$results" "$marker" "$keys" "$environment_unit"; do
     [[ ! -e $path && ! -L $path ]] || { echo "Refusing existing lab resource: $path" >&2; exit 2; }
 done
 docker info >/dev/null
@@ -75,6 +77,10 @@ cleanup() {
     fi
     ((created_marker)) && cleanup_command rm -- "$marker"
     ((created_keys)) && cleanup_command rm -- "$keys"
+    if ((created_environment_unit)); then
+        cleanup_command rm -f -- "$environment_unit"
+        cleanup_command timeout 10 systemctl daemon-reload
+    fi
     ((created_run_sshd)) && cleanup_command rmdir /run/sshd
     ((created_policy)) && cleanup_command rm -- /usr/sbin/policy-rc.d
     ((created_results)) && cleanup_command rm -rf -- "$results"
@@ -104,7 +110,7 @@ if ((created_policy)); then
     rm /usr/sbin/policy-rc.d
     created_policy=0
 fi
-for tool in sshd ssh ssh-keygen busybox ss nft iptables iptables-save ip6tables-save; do
+for tool in sshd ssh ssh-keygen busybox ss nft iptables iptables-save ip6tables-save systemctl; do
     command -v "$tool" >/dev/null || { echo "Missing fixture prerequisite: $tool" >&2; exit 1; }
 done
 busybox --list | grep -Fx httpd >/dev/null
@@ -123,6 +129,32 @@ mkdir "$lab"; created_lab=1
 mkdir "$results"; created_results=1
 chown root:root "$lab" "$results"
 chmod 700 "$lab" "$results"
+printf 'SYNTHETIC_ONLY=PRIVATE_SENTINEL_ENV\n' > "$lab/literal.env"
+printf 'SYNTHETIC_ONLY=PRIVATE_SENTINEL_ENV\n' > "$lab/production.env"
+printf 'SYNTHETIC_ONLY=PRIVATE_SENTINEL_ENV\n' > "$lab/settings[.conf"
+for literal in 'settings[].conf' 'settings[!].conf' 'settings[^].conf'; do
+    printf 'SYNTHETIC_ONLY=PRIVATE_SENTINEL_ENV\n' > "$lab/$literal"
+done
+mkdir "$lab/dir["
+printf 'SYNTHETIC_ONLY=PRIVATE_SENTINEL_ENV\n' > "$lab/dir[/settings].conf"
+cat > "$lab/server-audit-environment-fixture.service" <<'UNIT'
+[Service]
+Type=oneshot
+EnvironmentFile=-/opt/lab/*.env
+EnvironmentFile=/opt/lab/missing-?.env
+EnvironmentFile=-/opt/lab/settings-[ab].conf
+EnvironmentFile=/opt/lab/literal.env
+EnvironmentFile=/opt/lab/settings[.conf
+EnvironmentFile=/opt/lab/settings[].conf
+EnvironmentFile=/opt/lab/settings[!].conf
+EnvironmentFile=/opt/lab/settings[^].conf
+EnvironmentFile=/opt/lab/dir[/settings].conf
+EnvironmentFile=-/opt/lab/absent-literal
+ExecStart=/usr/bin/true
+UNIT
+# Load metadata only. The unit is never started and its environment files are not consumed.
+created_environment_unit=1
+timeout 10 systemctl --runtime link "$lab/server-audit-environment-fixture.service"
 if [[ ! -d /run/sshd ]]; then mkdir -m 755 /run/sshd; created_run_sshd=1; fi
 ssh-keygen -q -t ed25519 -N '' -f "$lab/host_key"
 ssh-keygen -q -t ed25519 -N '' -f "$lab/client_key"
@@ -210,6 +242,7 @@ printf 'Disposable GitHub/explicit VM integration fixture\n' > "$marker"; create
 "$python" --version
 docker version --format '{{.Server.Version}}'
 ssh -V
+systemctl --version
 nft --version
 iptables --version
 dpkg-query -W -f='${Package} ${Version}\n' openssh-server busybox-static
