@@ -85,14 +85,25 @@ def login_events(output):
     return sorted(events, key=lambda event: event["timestamp"])
 
 
-def collect(run, ssh_output=""):
+def collect(run, ssh_output="", *, ssh_check=None):
     import pwd
     import grp
 
     findings = []
     accounts = []
+    scope = {"status": "ok" if ssh_output else "unavailable",
+             "configuration_source": "unknown", "configuration_path": None,
+             "connection_context": None}
+    if ssh_check is not None:
+        scope = {name: ssh_check.get(name) for name in scope}
+        ssh_output = ssh_check.get("output", "") if scope["status"] == "ok" else ""
     settings = dict(line.split(None, 1) for line in ssh_output.splitlines() if len(line.split(None, 1)) == 2)
-    templates = settings.get("authorizedkeysfile", ".ssh/authorized_keys .ssh/authorized_keys2").split()
+    defaults = [".ssh/authorized_keys", ".ssh/authorized_keys2"]
+    templates = settings["authorizedkeysfile"].split() if "authorizedkeysfile" in settings else defaults
+    context = scope["connection_context"]
+    context_users = [part.partition('=')[2] for part in (context or '').split(',')
+                     if part.partition('=')[0] == 'user']
+    context_user = context_users[0] if len(context_users) == 1 and context_users[0] else None
     journal = run(["journalctl", "-t", "sshd", "-t", "sshd-session", "--since", "30 days ago", "-n", "10000", "--no-pager", "-o", "json"])
     events = login_events(journal.get("output", "")) if journal["status"] == "ok" else []
     usage = {"status": journal["status"], "detail": journal.get("detail", ""), "window": "Last 30 days, at most 10000 journal entries", "matched_events": len(events)}
@@ -120,7 +131,24 @@ def collect(run, ssh_output=""):
         if len(state) > 1 and state[1] == "NP":
             findings.append({"level": "REVIEW", "message": f"Account {user.pw_name} has no password. Actual login depends on PAM and SSH policy."})
         account["permissions"] = [permission_info(Path(user.pw_dir), user.pw_uid)]
-        for template in templates:
+        account_templates = templates
+        path_scope = {"source": "selected sshd configuration", "applicability": "unknown"}
+        if "authorizedkeysfile" not in settings:
+            path_scope.update(source="conventional defaults",
+                              detail="AuthorizedKeysFile unavailable; effective paths are unknown.")
+        elif context_user == user.pw_name:
+            path_scope.update(applicability="selected_context",
+                              detail="Paths apply to this user in the selected evaluation, not every connection or the running daemon.")
+        elif context_user is not None:
+            account_templates = defaults
+            path_scope.update(source="conventional defaults",
+                              detail="Selected SSH evaluation names another user; its key paths are not attributed to this account.")
+        elif context:
+            path_scope["detail"] = "Selected context has no unambiguous user; per-account Match applicability was not established."
+        else:
+            path_scope["detail"] = "No connection context was selected; base-configuration paths are candidates and per-account Match applicability is unknown."
+        account["key_path_scope"] = path_scope
+        for template in account_templates:
             if template == "none":
                 continue
             expanded = re.sub(r"%[%huU]", lambda match: {"%%": "%", "%h": user.pw_dir, "%u": user.pw_name, "%U": str(user.pw_uid)}[match[0]], template)
@@ -158,7 +186,10 @@ def collect(run, ssh_output=""):
         accounts.append(account)
     for fingerprint, owners in fingerprints.items():
         if len(owners) > 1:
-            findings.append({"level": "REVIEW", "message": f"SSH key {fingerprint} shared across accounts: {', '.join(sorted(owners))}."})
+            findings.append({"level": "REVIEW", "message": f"SSH key {fingerprint} observed in candidate key files for accounts: {', '.join(sorted(owners))}. Effective authorization across these accounts is unverified."})
+    unverified = [account["user"] for account in accounts if account["key_path_scope"]["applicability"] == "unknown"]
+    if unverified:
+        findings.append({"level": "UNKNOWN", "message": "SSH key-path applicability unverified for: " + ", ".join(unverified) + ". Candidate files are inventoried; inspect key_path_scope and the selected SSH evaluation before treating entries as effective authorization."})
     last_login = run(["lastlog"])
     incomplete = [account["user"] for account in accounts if account["password_state"]["status"] != "ok"]
     if incomplete:
@@ -171,14 +202,14 @@ def collect(run, ssh_output=""):
         findings.append({"level": "UNKNOWN", "message": "Account/password expiry unavailable for: " + ", ".join(incomplete_expiry)})
     if last_login["status"] != "ok":
         findings.append({"level": "UNKNOWN", "message": "Account last-login history unavailable; inspect last_login evidence."})
-    return {"status": "ok", "accounts": accounts, "key_usage": usage,
+    return {"status": "ok", "accounts": accounts, "key_usage": usage, "ssh_scope": scope,
             "key_path_source": "selected sshd configuration/context" if "authorizedkeysfile" in settings else "conventional defaults; effective paths unknown",
             "last_login": last_login,
             "limitations": [
                 "Accounts/groups are those enumerable through NSS; non-enumerable directory users may be absent.",
                 "Password lock is not account disablement: SSH keys may still work. chage describes local shadow expiry; directory/PAM policies may differ.",
                 "Sudo evidence comes from sudo -l; denied policies and lookup errors retain their native status. Group names alone do not prove all effective privileges.",
-                "Key paths use the selected sshd output, or conventional defaults if unavailable. Per-user/address Match rules, AuthorizedKeysCommand, trusted CAs and certificates require separate review.",
+                "User-specific SSH paths are used only for that user; other accounts use conventional candidates. Context without a user and base-configuration paths have unverified per-account applicability. AuthorizedKeysCommand, trusted CAs, certificates and other Match contexts require separate review.",
                 "Permissions cover home, key parent and key file mode/owner, not ACLs or all ancestor directories. Symlink mode bits are not target permissions; target access remains unverified. Symlink key paths are skipped.",
                 "Last observed key use comes only from visible retained journal entries. No match means unknown, never unused. lastlog may be missing or incomplete and is account-level, not key-level.",
             ]}, findings
