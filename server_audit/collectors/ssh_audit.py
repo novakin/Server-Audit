@@ -4,6 +4,7 @@
 def ssh_findings(output):
     settings = dict(line.split(None, 1) for line in output.splitlines() if len(line.split(None, 1)) == 2)
     findings = []
+    forwarding_disabled = settings.get("disableforwarding") == "yes"
     for key, safe, advice in [
         ("permitrootlogin", {"no"}, "Prefer a named administrator with sudo; verify access before disabling root login."),
         ("passwordauthentication", {"no"}, "Prefer SSH keys; verify key access before disabling passwords."),
@@ -11,6 +12,8 @@ def ssh_findings(output):
         ("x11forwarding", {"no"}, "Disable X11 forwarding if unused."),
         ("allowtcpforwarding", {"no"}, "Restrict forwarding if SSH tunnels are not required."),
     ]:
+        if forwarding_disabled and key in {"x11forwarding", "allowtcpforwarding"}:
+            continue
         value = settings.get(key)
         if value is not None and value not in safe:
             findings.append({"level": "REVIEW", "message": f"SSH {key}={value}. {advice}"})
@@ -20,7 +23,7 @@ def ssh_findings(output):
         "port", "listenaddress", "permitrootlogin", "passwordauthentication",
         "pubkeyauthentication", "kbdinteractiveauthentication", "usepam",
         "permitemptypasswords", "authenticationmethods", "allowusers", "allowgroups",
-        "denyusers", "denygroups", "maxauthtries", "x11forwarding", "allowtcpforwarding",
+        "denyusers", "denygroups", "maxauthtries", "x11forwarding", "allowtcpforwarding", "disableforwarding",
     }}
     return selected, findings
 

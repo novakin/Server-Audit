@@ -150,6 +150,8 @@ sudo python3 audit.py --ssh-context 'user=alice,addr=198.51.100.10,host=client.e
 
 Repeat for relevant users and source networks. `sshd -T` reads the default on-disk configuration; a running daemon may use different arguments or an older configuration. Authentication methods may interact: enabled passwords do not necessarily mean password-only login is possible. Keyboard-interactive may be required for MFA. Verify a second working SSH session before applying any recommended access changes.
 
+Explicit `disableforwarding yes` overrides the subordinate forwarding settings, so the audit does not advise disabling TCP/X11 forwarding in that selected evaluation. The override and subordinate values remain inspectable. `disableforwarding no` or a missing override retains the existing recommendations; absence is not inferred as an observed `no`. Other SSH findings are unaffected. This interpretation does not prove the running daemon's policy or test a forwarding connection.
+
 For a daemon using a custom configuration file, add `--ssh-config /path/to/sshd_config`. This evaluates that file; it does not establish which configuration the running daemon loaded or reproduce command-line overrides.
 
 ## Accounts, access and SSH keys
