@@ -85,10 +85,19 @@ def collect(run):
     if listing["status"] != "ok":
         return listing, []
     containers = []
+    check = {"status": "ok", "containers": containers, "endpoint": DOCKER[2],
+             "limitations": [
+                 "Local default Docker socket only; rootless daemons, remote contexts, Podman and Swarm service specifications are not covered.",
+                 "All containers, including stopped ones, are inspected. Listing and inspection are not an atomic snapshot.",
+                 "Published ports do not prove internet reachability; host/macvlan/ipvlan networking may expose services without port mappings.",
+                 "Configured users, capabilities and limits are configuration evidence, not measured process privileges or live resource usage. Zero/null limits may inherit daemon or parent-cgroup limits.",
+                 "No container exec, image pulls, container logs or vulnerability scans. Environment, commands, labels, health-check output and log-driver options are excluded.",
+             ]}
     findings = []
     for identifier in listing.get("output", "").splitlines():
         if not re.fullmatch(r"[0-9a-f]{64}", identifier):
-            return {"status": "error", "detail": "Docker returned an invalid container ID; inventory incomplete"}, findings
+            check.update(status="error", detail="Docker returned an invalid container ID; inventory incomplete")
+            return check, findings
         result = run(DOCKER + ["inspect", "--type", "container", "--format", INSPECT_FORMAT, identifier])
         if result["status"] != "ok":
             containers.append({"id": identifier, "inspection_status": "error", "detail": result.get("detail", "Inspection failed")})
@@ -107,11 +116,4 @@ def collect(run):
         container["inspection_status"] = "ok"
         containers.append(container)
         findings.extend(findings_for(container))
-    return {"status": "ok", "containers": containers, "endpoint": DOCKER[2],
-            "limitations": [
-                "Local default Docker socket only; rootless daemons, remote contexts, Podman and Swarm service specifications are not covered.",
-                "All containers, including stopped ones, are inspected. Listing and inspection are not an atomic snapshot.",
-                "Published ports do not prove internet reachability; host/macvlan/ipvlan networking may expose services without port mappings.",
-                "Configured users, capabilities and limits are configuration evidence, not measured process privileges or live resource usage. Zero/null limits may inherit daemon or parent-cgroup limits.",
-                "No container exec, image pulls, container logs or vulnerability scans. Environment, commands, labels, health-check output and log-driver options are excluded.",
-            ]}, findings
+    return check, findings

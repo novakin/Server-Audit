@@ -136,6 +136,8 @@ Findings flag root/default configured users, privileged mode, host namespaces, a
 
 The inspect command requests an explicit allowlist of metadata. Only the environment entry count is captured; variable names/values, command arguments, labels, health-check logs/output and log-driver options are excluded. No container commands are executed and no images are pulled. Paths, names, addresses and image references remain potentially sensitive operational details. Containers disappearing during inspection produce unknown findings while other container results remain available.
 
+A malformed listing ID stops further inspection at that entry. Docker retains `error` status with an incomplete-inventory explanation, while previously collected containers, inspection failures and findings remain available. The runner emits an Unknown finding for that listing failure; retained evidence does not establish complete coverage. Neither the invalid ID nor later entries are passed to inspect, and malformed listing text is not exported. An invalid first entry remains an error with an empty inventory, distinct from a successful empty daemon.
+
 Docker may publish ports without a corresponding userspace listener, so compare Docker bindings with host sockets and firewall rules. Host/macvlan/ipvlan networking may expose services without published-port mappings. This is not an image vulnerability scan, registry freshness check, live resource monitor or Docker daemon hardening assessment. Rootless daemons, remote contexts, Podman and Swarm service specifications are outside scope.
 
 Structured Docker results now live under `checks.docker`; this replaces the earlier text-only `checks.docker_ports` field.
