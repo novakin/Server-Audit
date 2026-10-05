@@ -3,11 +3,17 @@
 import ipaddress
 
 
-def listeners(output):
+def _parse_listeners(output):
     entries = []
+    records = 0
+    unparsed = 0
     for line in output.splitlines():
+        if not line.strip():
+            continue
+        records += 1
         fields = line.split(None, 6)
         if len(fields) < 6:
+            unparsed += 1
             continue
         address = fields[4]
         host = address.rsplit(":", 1)[0].strip("[]")
@@ -21,17 +27,26 @@ def listeners(output):
             "binding": "loopback" if loopback else "non-loopback (reachability unverified)",
             "process": fields[6] if len(fields) > 6 else "unknown (permissions or kernel socket)",
         })
-    return entries
+    coverage = {"status": "partial" if unparsed else "ok", "records_observed": records,
+                "records_parsed": len(entries), "records_unparsed": unparsed}
+    return entries, coverage
+
+
+def listeners(output):
+    return _parse_listeners(output)[0]
 
 
 def collect_ports(run):
     check = run(["ss", "-H", "-lntup"])
     findings = []
     if check["status"] == "ok":
-        check["listeners"] = listeners(check["output"])
+        check["listeners"], check["parser_coverage"] = _parse_listeners(check["output"])
+        unparsed = check["parser_coverage"]["records_unparsed"]
+        if unparsed:
+            findings.append({"level": "UNKNOWN", "message": f"Socket inventory incomplete: {unparsed} nonempty ss records could not be parsed. Review the retained command output; listed sockets remain available.", "check": "ports"})
         count = sum(item["binding"] != "loopback" for item in check["listeners"])
         if count:
-            findings.append({"level": "REVIEW", "message": f"{count} non-loopback TCP/UDP sockets. Confirm each service is needed and restricted by firewall where appropriate."})
+            findings.append({"level": "REVIEW", "message": f"{count} non-loopback TCP/UDP sockets. Confirm each service is needed and restricted by firewall where appropriate.", "check": "ports"})
     return check, findings
 
 

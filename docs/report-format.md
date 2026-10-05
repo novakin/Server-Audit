@@ -14,11 +14,47 @@ The authoritative serialized evidence is `data/report.json` in an export bundle,
 | `timestamp_utc` | Audit start timestamp as an ISO 8601 UTC string |
 | `host` | Host identity reported by the local platform |
 | `checks` | Mapping of stable check names to collector evidence dictionaries |
-| `findings` | List of `{level, message}` records; current levels `REVIEW` and `UNKNOWN` |
+| `findings` | Flat list of `{level, message}` records with optional grouping metadata; current levels `REVIEW` and `UNKNOWN` |
 | `summary` | Counts of top-level findings by level, not counts of vulnerable services |
 | `limitations` | General scope limitations; collectors can also supply their own `limitations` |
 
 Evidence shapes differ by collector. Inspect the matching collector and tests when consuming nested data. Account/native-command records may contain status/output/detail; inventories use structured objects. Missing fields, null values and empty inventories have different meanings. Do not treat an absent inventory as an empty successful scan.
+
+## Finding metadata and grouped HTML
+
+New finding producers can add `check`, `resource_type`, `resource_id` and `resource_name`. `check` uses an existing check key. The resource identity is `(check, resource_type, resource_id)`; `resource_name` is display/search text only. All fields are optional strings. These fields are additive within schema version 1: levels, full messages and the flat JSON finding sequence are retained. Grouping never deduplicates findings or changes detection policy.
+
+| Resource | Identity convention |
+| --- | --- |
+| Docker container | Full daemon-provided container ID; name is display metadata |
+| Account | Account username within the snapshot |
+| Shared SSH key | Observed fingerprint, attributed once to the shared key rather than copied under every account |
+| Environment file / ancestor directory | Collected path string, without new filesystem resolution |
+| Git repository | Selected repository path string |
+| Selected SSH configuration/context | JSON-encoded configuration/context pair; the existing selected scope remains authoritative |
+| Scheduled definition / referenced script / timer | Definition/script path or timer unit name; parent-permission findings use the directory path |
+| System service | Unit name when a finding concerns one known service |
+| External endpoint | Protocol, literal target and port; IPv6 targets are bracketed in the ID |
+
+HTML groups checks and resources in first-appearance order and retains original finding order within each group. Separate IDs with identical display names remain separate groups. A known check without a complete resource identity uses its General bucket. Findings without a meaningful single check, including audit-wide and collective firewall findings, remain under General findings. Older reports and mixed legacy/new findings render without inferred identities; messages are never parsed as keys.
+
+Every finding appears once, including identical duplicates, with its complete message and level. Check/resource badges display separate **fixed totals** for Review and Unknown and explicitly say Totals. Search combines finding text, resource display/identity metadata and the displayed resource heading. Filters hide unmatched rows and empty groups while global/group totals remain unchanged; one live result message announces the shown finding count. Print restores every group and row regardless of screen filters and uses the same complete totals. Resource headings are semantic `h4` headings below check `h3` headings; findings remain visible without JavaScript and are not placed in accordions.
+
+The visible capture time is formatted in UTC on one line where it fits, for example `01 Jan 2026 - 12:00:00 UTC`; machine timestamps remain ISO 8601.
+
+General scope boundaries stay visible. Full collector limitations are retained under expandable topics using their existing check ownership, including repeated notes; no text-based classification or suppression is performed. Print opens these topics alongside collected evidence and restores their prior state afterward.
+
+## Native-command capture and parser coverage
+
+Ordinary host commands have a 30-second capture/execution deadline and fixed raw-byte caps of 8 MiB stdout and 1 MiB stderr, enforced independently during concurrent pipe reads. This allows substantial normal inventories while bounding retained output; exceeding a cap is incomplete collection rather than a successful truncated inventory. Deadline, overflow or capture/pipe-cleanup failure returns `error` with a payload-free explanation and withholds both captured streams, including partial output. Normal completed nonzero commands retain their bounded stdout/stderr and exit code. Cancellation propagates after shutdown rather than generating a completed report; unconfirmed shutdown aborts the audit. Shutdown has a separate bounded cleanup allowance. The secret-bearing Git reader keeps its separate existing limits and diagnostics policy.
+
+Successful socket collection adds `checks.ports.parser_coverage` with `status`, `records_observed`, `records_parsed` and `records_unparsed`. Counts cover nonblank records. Short nonempty rows produce parser `partial` and one explanatory Unknown while valid listeners and existing raw output survive. The top native command status remains `ok`: it describes command collection, not complete interpretation. Empty successful output has all-zero counts and parser `ok`; wholly unparsed nonempty output remains visibly different.
+
+## Application-source coverage
+
+`checks.environment_files.applications.status` retains its existing systemd-reference aggregate meaning; it is not a promise that every Docker container was inspected. `docker_status` retains the source inventory status. Additive `docker_coverage` contains a fixed safe `detail`, `status`, `containers_retained` and `containers_inspected` (successful inspections). Retained containers are a lower bound when inventory failed. Optional Docker absence is `skipped`, missing evidence is `unavailable`, inventory/inspection failures are `partial`, and successful empty or fully inspected inventories are `ok` within the documented endpoint scope.
+
+HTML and text show this explanation/counts alongside application sources. Independent directory discovery and successful sources survive. Existing Docker collector/runner Unknown findings remain authoritative; this clarification adds no duplicate finding or global status redesign. Older reports without the additive field still render their existing source evidence.
 
 ## SSH scope and repeated settings
 

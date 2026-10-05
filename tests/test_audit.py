@@ -1,4 +1,3 @@
-import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -16,7 +15,7 @@ class AuditTests(unittest.TestCase):
         self.assertIn('No kernel firewall', findings[0]['message'])
 
     def test_missing_firewall_tools_skip_but_filtering_remains_unknown(self):
-        with patch('server_audit.command_runner.shutil.which', return_value=None), patch('server_audit.command_runner.subprocess.run') as process:
+        with patch('server_audit.command_runner.shutil.which', return_value=None), patch('server_audit.command_runner.subprocess.Popen') as process:
             checks = network_audit.collect_firewalls(command_runner.run)
         process.assert_not_called()
         self.assertTrue(all(check['status'] == 'skipped' for check in checks.values()))
@@ -44,6 +43,7 @@ class AuditTests(unittest.TestCase):
     def test_permission_denial_remains_visible_for_optional_tool(self):
         findings = audit_runner.summarize({'nftables': {'status': 'error', 'detail': 'Permission denied'}})
         self.assertTrue(any('Permission denied' in item['message'] for item in findings))
+        self.assertEqual(findings[0], {'level': 'UNKNOWN', 'message': 'nftables: Permission denied', 'check': 'nftables'})
 
     def test_ipv4_mapped_loopback(self):
         result = network_audit.listeners('tcp LISTEN 0 128 [::ffff:127.0.0.1]:8080 [::]:*')
@@ -81,19 +81,6 @@ class AuditTests(unittest.TestCase):
     def test_missing_command_is_unknown_not_success(self):
         with patch('server_audit.command_runner.shutil.which', return_value=None):
             self.assertEqual(command_runner.run(['ss'])['status'], 'unavailable')
-
-    def test_permission_error_preserves_evidence(self):
-        result = subprocess.CompletedProcess(['nft'], 1, '', 'Operation not permitted')
-        with patch('server_audit.command_runner.shutil.which', return_value='/usr/sbin/nft'), patch('server_audit.command_runner.subprocess.run', return_value=result):
-            check = command_runner.run(['nft', 'list', 'ruleset'])
-        self.assertEqual(check['status'], 'error')
-        self.assertEqual(check['exit_code'], 1)
-        self.assertIn('not permitted', check['detail'])
-
-    def test_timeout_is_reported(self):
-        with patch('server_audit.command_runner.shutil.which', return_value='/usr/bin/docker'), patch('server_audit.command_runner.subprocess.run', side_effect=subprocess.TimeoutExpired('docker', 30)):
-            self.assertEqual(command_runner.run(['docker', 'ps'])['status'], 'error')
-
 
 if __name__ == '__main__':
     unittest.main()

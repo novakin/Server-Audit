@@ -325,7 +325,8 @@ class KeyTests(unittest.TestCase):
                     )
                 permission = check['accounts'][0]['permissions'][0]
                 unknown = {'level': 'UNKNOWN',
-                           'message': f"alice: {link}: {permission['unknown']}"}
+                           'message': f"alice: {link}: {permission['unknown']}",
+                           'check': 'accounts', 'resource_type': 'account', 'resource_id': 'alice', 'resource_name': 'alice'}
                 self.assertEqual(findings.count(unknown), 1)
                 alice_reviews = [item['message'] for item in findings
                                  if item['level'] == 'REVIEW' and item['message'].startswith('alice:')]
@@ -335,7 +336,8 @@ class KeyTests(unittest.TestCase):
                     self.assertEqual(alice_reviews,
                                      [f'alice: unexpected owner UID {owner} on symbolic link {link}.'])
                 self.assertIn({'level': 'REVIEW', 'message':
-                               f'bob: unexpected owner or group/other write permission on {ordinary} (0o777).'},
+                               f'bob: unexpected owner or group/other write permission on {ordinary} (0o777).',
+                               'check': 'accounts', 'resource_type': 'account', 'resource_id': 'bob', 'resource_name': 'bob'},
                               findings)
                 self.assertIn('target permissions not inspected', account_text_report(check))
                 self.assertEqual(json.loads(json.dumps(check)), check)
@@ -360,7 +362,8 @@ class KeyTests(unittest.TestCase):
         self.assertTrue(all(item['keys'] == [] for item in inventories))
         link_permissions = [item for item in check['accounts'][0]['permissions'] if item.get('symlink')]
         self.assertEqual(len(link_permissions), 2)  # Each configured key retains its parent evidence.
-        unknown = {'level': 'UNKNOWN', 'message': f"alice: {link}: {link_permissions[0]['unknown']}"}
+        unknown = {'level': 'UNKNOWN', 'message': f"alice: {link}: {link_permissions[0]['unknown']}",
+                   'check': 'accounts', 'resource_type': 'account', 'resource_id': 'alice', 'resource_name': 'alice'}
         self.assertEqual(findings.count(unknown), 1)
         self.assertFalse(any(item['level'] == 'REVIEW' for item in findings))
         self.assertNotIn('PRIVATE_SYNTHETIC_SENTINEL', json.dumps((check, findings)))

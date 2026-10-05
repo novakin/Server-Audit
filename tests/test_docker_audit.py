@@ -110,7 +110,7 @@ class DockerTests(unittest.TestCase):
         self.assertTrue(check['limitations'])
         self.assertEqual(findings, [])
         coverage = [item for item in audit_runner.summarize({'docker': check}) if item['message'].startswith('docker:')]
-        self.assertEqual(coverage, [{'level': 'UNKNOWN', 'message': 'docker: ' + check['detail']}])
+        self.assertEqual(coverage, [{'level': 'UNKNOWN', 'message': 'docker: ' + check['detail'], 'check': 'docker'}])
         self.assertNotIn('SECRET_SENTINEL', json.dumps((check, coverage)))
 
     def test_valid_listing_preserves_all_containers_and_has_no_listing_failure(self):
@@ -142,7 +142,7 @@ class DockerTests(unittest.TestCase):
         self.assertEqual(check['status'], 'error')
         self.assertEqual(check['containers'][0]['name'], candidate['name'])
         self.assertEqual(report['summary'], {level: baseline['summary'][level] + 1 for level in ('REVIEW', 'UNKNOWN')})
-        self.assertEqual(report['findings'].count({'level': 'UNKNOWN', 'message': 'docker: ' + check['detail']}), 1)
+        self.assertEqual(report['findings'].count({'level': 'UNKNOWN', 'message': 'docker: ' + check['detail'], 'check': 'docker'}), 1)
         with tempfile.TemporaryDirectory() as directory:
             folder = reporting.export_report(report, directory)
             self.assertEqual(json.loads((folder / 'data/report.json').read_text()), report)

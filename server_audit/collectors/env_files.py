@@ -16,6 +16,13 @@ MAX_DEPTH = 12
 SCAN_SECONDS = 15
 
 
+def _finding(level, message, path=None, resource_type="file"):
+    finding = {"level": level, "message": message, "check": "environment_files"}
+    if path is not None:
+        finding.update(resource_type=resource_type, resource_id=str(path), resource_name=str(path))
+    return finding
+
+
 def is_env_name(name):
     return name == ".env" or name.startswith(".env.") or name.endswith(".env")
 
@@ -54,7 +61,7 @@ def inspect_file(path, parent_cache):
     findings = []
     if item["type"] != "file" or any(parent.is_symlink() for parent in path.parents):
         item["status"] = "skipped"
-        findings.append({"level": "UNKNOWN", "message": f"Environment file candidate {path}: special file or symlink path skipped; target/content not inspected."})
+        findings.append(_finding("UNKNOWN", f"Environment file candidate {path}: special file or symlink path skipped; target/content not inspected.", path))
         return item, findings
     item["status"] = "inspected"
     mode = int(item["mode"], 8)
@@ -77,11 +84,11 @@ def inspect_file(path, parent_cache):
             message += " Restrict write access to trusted writers to protect file integrity."
         if mode & 0o044:
             message += " Contents were not inspected. If confidential values are stored here, restrict read access to intended readers while preserving required service access."
-        findings.append({"level": "REVIEW", "message": message})
+        findings.append(_finding("REVIEW", message, path))
     if item["extended_acl"] == "present":
-        findings.append({"level": "REVIEW", "message": f"Environment file {path} has an extended ACL. Inspect effective entries with getfacl; mode bits alone do not identify authorized users."})
+        findings.append(_finding("REVIEW", f"Environment file {path} has an extended ACL. Inspect effective entries with getfacl; mode bits alone do not identify authorized users.", path))
     elif item["extended_acl"] == "unknown":
-        findings.append({"level": "UNKNOWN", "message": f"Environment file {path}: extended ACL metadata could not be established."})
+        findings.append(_finding("UNKNOWN", f"Environment file {path}: extended ACL metadata could not be established.", path))
     item["parents"] = []
     for parent in path.parents:
         if parent not in parent_cache:
@@ -161,7 +168,9 @@ def application_sources(run, checks):
             source["detail"] = evidence.get("detail", "EnvironmentFiles unavailable")
             partial = True
         sources.append(source)
-    for container in checks.get("docker", {}).get("containers", []):
+    docker = checks.get("docker", {})
+    containers = docker.get("containers", [])
+    for container in containers:
         source = {"kind": "docker", "name": container.get("name", container.get("id", "unknown")),
                   "status": container.get("inspection_status", "unknown"),
                   "configured_variable_count": container.get("environment_variable_count"), "files": []}
@@ -172,9 +181,31 @@ def application_sources(run, checks):
                 references.append(reference)
                 source["files"].append({"path": path, "container_path": mount.get("destination"), "writable": mount.get("writable")})
         sources.append(source)
+    docker_status = docker.get("status", "unavailable")
+    inspected = sum(container.get("inspection_status") == "ok" for container in containers)
+    if docker_status == "skipped":
+        coverage_status = "skipped"
+        detail = "Docker application references skipped: optional Docker CLI unavailable. Daemon presence is unverified."
+    elif docker_status == "unavailable":
+        coverage_status = "unavailable"
+        detail = "Docker application references unavailable: Docker evidence could not be collected. Daemon and container presence are unverified."
+    elif docker_status != "ok":
+        coverage_status = "partial"
+        detail = "Docker application references incomplete: container inventory failed or was interrupted. Retained containers are a lower bound, not a complete inventory."
+    elif inspected != len(containers):
+        coverage_status = "partial"
+        detail = "Docker application references incomplete: one or more retained containers could not be inspected. Available source evidence and independent file discovery remain valid."
+    elif not containers:
+        coverage_status = "ok"
+        detail = "Docker inventory succeeded with no containers; no Docker application references were found in the audited endpoint."
+    else:
+        coverage_status = "ok"
+        detail = "Docker application references cover inspected metadata for all retained containers; effective process environments and original env-file paths remain unverified."
     return {"status": "partial" if partial else "ok", "sources": sources,
             "systemd_units_limit": 100, "systemd_units_observed": len(units),
-            "docker_status": checks.get("docker", {}).get("status", "unavailable")}, references
+            "docker_status": docker_status,
+            "docker_coverage": {"status": coverage_status, "containers_retained": len(containers),
+                                "containers_inspected": inspected, "detail": detail}}, references
 
 
 def collect(roots=None, run=None, checks=None):
@@ -205,7 +236,7 @@ def collect(roots=None, run=None, checks=None):
                 result["status"] = "partial"
                 result["skipped"].append({"path": str(path), "reason": reference["detail"],
                                           "application": reference["application"], "optional": reference["optional"]})
-                findings.append({"level": "UNKNOWN", "message": f"EnvironmentFile reference {path} for {reference['application']}: {reference['detail']}"})
+                findings.append(_finding("UNKNOWN", f"EnvironmentFile reference {path} for {reference['application']}: {reference['detail']}"))
                 continue
             existing = next((item for item in result["files"] if item["path"] == str(path)), None)
             if existing is not None:
@@ -294,14 +325,14 @@ def collect(roots=None, run=None, checks=None):
                 scope["status"] = "partial"
     for parent in parents.values():
         if "unknown" in parent:
-            findings.append({"level": "UNKNOWN", "message": f"Environment file ancestor {parent['path']}: metadata unavailable."})
+            findings.append(_finding("UNKNOWN", f"Environment file ancestor {parent['path']}: metadata unavailable.", parent['path'], "directory"))
         elif int(parent["mode"], 8) & 0o022 and not parent["sticky"]:
-            findings.append({"level": "REVIEW", "message": f"Environment file ancestor {parent['path']} ({parent['mode']}) is group/world-writable; files or path components may be replaceable."})
+            findings.append(_finding("REVIEW", f"Environment file ancestor {parent['path']} ({parent['mode']}) is group/world-writable; files or path components may be replaceable.", parent['path'], "directory"))
         if parent.get("extended_acl") == "present":
-            findings.append({"level": "REVIEW", "message": f"Environment file ancestor {parent['path']} has an extended ACL; review effective directory access."})
+            findings.append(_finding("REVIEW", f"Environment file ancestor {parent['path']} has an extended ACL; review effective directory access.", parent['path'], "directory"))
         elif parent.get("extended_acl") == "unknown":
-            findings.append({"level": "UNKNOWN", "message": f"Environment file ancestor {parent['path']}: extended ACL metadata unavailable."})
+            findings.append(_finding("UNKNOWN", f"Environment file ancestor {parent['path']}: extended ACL metadata unavailable.", parent['path'], "directory"))
     if result["status"] == "partial":
-        findings.append({"level": "UNKNOWN", "message": "Environment-file discovery incomplete. Review roots, scan limits and skipped paths; undiscovered files may remain."})
+        findings.append(_finding("UNKNOWN", "Environment-file discovery incomplete. Review roots, scan limits and skipped paths; undiscovered files may remain."))
     result["files"].sort(key=lambda item: item["path"])
     return result, findings

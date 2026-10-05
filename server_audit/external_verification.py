@@ -192,7 +192,7 @@ def merge(report, probes):
         evidence.append(probe)
         age = (timestamp(probe['started_at_utc']) - timestamp(report['timestamp_utc'])).total_seconds()
         if age < 0 or age > 86400:
-            findings.append({'level': 'UNKNOWN', 'message': 'External probe at ' + probe['location'] + ' is before or more than 24 hours after the host snapshot; service correlation needs a fresh audit.'})
+            findings.append({'level': 'UNKNOWN', 'message': 'External probe at ' + probe['location'] + ' is before or more than 24 hours after the host snapshot; service correlation needs a fresh audit.', 'check': 'external_verification'})
         for row in probe['results']:
             status = 'unknown'
             reason = 'Independent external source not confirmed' if not probe['independent'] else 'Nonpublic target: not evidence of internet reachability'
@@ -208,7 +208,14 @@ def merge(report, probes):
             observations.append({**row, 'location': probe['location'], 'exposure': LABELS[status],
                                  'reason': reason, 'local_candidates': matches, 'snapshot_age_seconds': age})
             if status == 'reachable':
-                findings.append({'level': 'REVIEW', 'message': f"TCP {row['target']}:{row['port']} externally reachable from {probe['location']} at {row['observed_at_utc']}; service/host mapping is unverified."})
+                target = '[' + row['target'] + ']' if ':' in row['target'] else row['target']
+                findings.append({
+                    'level': 'REVIEW',
+                    'message': f"TCP {row['target']}:{row['port']} externally reachable from {probe['location']} at {row['observed_at_utc']}; service/host mapping is unverified.",
+                    'check': 'external_verification', 'resource_type': 'endpoint',
+                    'resource_id': f"tcp:{target}:{row['port']}",
+                    'resource_name': f"TCP {target}:{row['port']}",
+                })
         # Inventory omissions stay explicit rather than inheriting a negative result.
         for protocol, number in sorted({(item['protocol'], item['port']) for item in candidates}):
             if protocol != 'tcp' or number not in probe['ports']:
@@ -219,7 +226,7 @@ def merge(report, probes):
                                      'local_candidates': [item['source'] for item in candidates if item['port'] == number and item['protocol'] == protocol]})
     incomplete = any(item['exposure'] == LABELS['unknown'] for item in observations)
     if incomplete:
-        findings.append({'level': 'UNKNOWN', 'message': 'External verification includes untested ports, local/network errors, nonpublic targets or an unconfirmed independent source. Review raw observations and scope.'})
+        findings.append({'level': 'UNKNOWN', 'message': 'External verification includes untested ports, local/network errors, nonpublic targets or an unconfirmed independent source. Review raw observations and scope.', 'check': 'external_verification'})
     merged = copy.deepcopy(report)
     merged['checks']['external_verification'] = {'status': 'partial' if incomplete or any(item['level'] == 'UNKNOWN' for item in findings) else 'ok',
                                                 'observations': observations, 'probes': evidence, 'limitations': LIMITATIONS}

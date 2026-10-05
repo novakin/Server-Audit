@@ -36,6 +36,49 @@ class SourceTests(unittest.TestCase):
         self.assertIn('--property=EnvironmentFiles', calls[0])
         self.assertNotIn('--property=Environment', calls[0])
 
+    def test_docker_coverage_distinguishes_absence_failure_and_success_without_relabeling_aggregate(self):
+        inspected = {'name': '/web', 'inspection_status': 'ok', 'environment_variable_count': 4,
+                     'mounts': [{'type': 'bind', 'source': '/srv/app.env', 'destination': '/app/.env'}]}
+        failed = {'id': 'a' * 64, 'inspection_status': 'error', 'detail': 'DO_NOT_COPY_CONTAINER_DETAIL'}
+        cases = [
+            ({}, 'unavailable', 0, 0, 'presence are unverified'),
+            ({'status': 'skipped', 'detail': 'DO_NOT_COPY_DOCKER_DETAIL'}, 'skipped', 0, 0, 'CLI unavailable'),
+            ({'status': 'unavailable'}, 'unavailable', 0, 0, 'could not be collected'),
+            ({'status': 'error', 'detail': 'DO_NOT_COPY_DOCKER_DETAIL'}, 'partial', 0, 0, 'inventory failed'),
+            ({'status': 'error', 'containers': [inspected, failed]}, 'partial', 2, 1, 'lower bound'),
+            ({'status': 'ok', 'containers': [inspected, failed]}, 'partial', 2, 1, 'could not be inspected'),
+            ({'status': 'ok', 'containers': [inspected]}, 'ok', 1, 1, 'all retained containers'),
+            ({'status': 'ok', 'containers': []}, 'ok', 0, 0, 'succeeded with no containers'),
+        ]
+        for docker, expected_status, retained, successful, explanation in cases:
+            with self.subTest(docker=docker):
+                checks = {'running_services': {'status': 'ok', 'output': ''}, 'docker': docker}
+                result, references = env_files.application_sources(lambda command: self.fail('No systemd units'), checks)
+                coverage = result['docker_coverage']
+                self.assertEqual(result['status'], 'ok')  # Existing aggregate semantics preserved.
+                self.assertEqual(result['docker_status'], docker.get('status', 'unavailable'))
+                self.assertEqual(coverage['status'], expected_status)
+                self.assertEqual(coverage['containers_retained'], retained)
+                self.assertEqual(coverage['containers_inspected'], successful)
+                self.assertIn(explanation, coverage['detail'])
+                self.assertNotIn('DO_NOT_COPY', json.dumps(result))
+                self.assertEqual(len(result['sources']), retained)
+                if retained:
+                    self.assertEqual(result['sources'][0]['configured_variable_count'], 4)
+                    self.assertEqual(references, [{'path': '/srv/app.env', 'optional': False, 'application': 'docker:/web'}])
+                if retained > successful:
+                    self.assertEqual(result['sources'][-1]['status'], 'error')
+
+    def test_docker_uncertainty_does_not_add_duplicate_findings_to_independent_collection(self):
+        for docker in ({'status': 'skipped'}, {'status': 'error'},
+                       {'status': 'ok', 'containers': [{'id': 'a' * 64, 'inspection_status': 'error'}]}):
+            with self.subTest(docker=docker):
+                checks = {'running_services': {'status': 'ok', 'output': ''}, 'docker': docker}
+                result, findings = env_files.collect([], lambda command: self.fail('No systemd units'), checks)
+                self.assertEqual(result['status'], 'ok')
+                self.assertEqual(result['applications']['status'], 'ok')
+                self.assertEqual(findings, [])
+
 
 @unittest.skipUnless(platform.system() == 'Linux', 'Linux permissions and xattrs')
 class MetadataTests(unittest.TestCase):
@@ -66,6 +109,11 @@ class MetadataTests(unittest.TestCase):
         for phrase in ('other read bit set', 'world-writable', 'group-writable', 'executable', 'ancestor'):
             self.assertIn(phrase, messages)
         self.assertEqual(result['status'], 'ok')
+        file_findings = [item for item in findings if item.get('resource_type') == 'file']
+        self.assertEqual([item['resource_id'] for item in file_findings], [str(self.root / '.env')])
+        ancestor_findings = [item for item in findings if item.get('resource_type') == 'directory']
+        self.assertEqual([item['resource_id'] for item in ancestor_findings], [str(self.root)])
+        self.assertTrue(all(item['check'] == 'environment_files' for item in findings))
 
     def test_read_bits_receive_conditional_advice_without_changing_metadata_or_reading_contents(self):
         for mode in (0o600, 0o640, 0o644):
@@ -215,6 +263,8 @@ class MetadataTests(unittest.TestCase):
                     self.assertIn('not evaluated', report['skipped'][0]['reason'])
                     self.assertTrue(any(item['level'] == 'UNKNOWN' and 'EnvironmentFile reference' in item['message']
                                         and str(path) in item['message'] for item in findings))
+                    self.assertTrue(all(item['check'] == 'environment_files' and 'resource_id' not in item
+                                        for item in findings))
                     self.assertNotIn('Optional application file absent', json.dumps(report))
 
     def test_repeated_environment_files_properties_preserve_all_reference_evidence(self):
@@ -313,6 +363,24 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(report['files'][0]['path'], str(path))
         self.assertEqual(report['files'][0]['applications'], ['docker:/app'])
         self.assertFalse(any('Wildcard' in item['message'] for item in findings))
+
+    def test_independent_discovery_survives_incomplete_docker_references(self):
+        path = self.file()
+        for docker in ({'status': 'skipped'}, {'status': 'error', 'detail': 'DO_NOT_COPY_DAEMON_DETAIL'},
+                       {'status': 'ok', 'containers': [{'id': 'a' * 64, 'inspection_status': 'error',
+                                                       'detail': 'DO_NOT_COPY_INSPECT_DETAIL'}]}):
+            with self.subTest(docker=docker), \
+                 patch('builtins.open', side_effect=AssertionError('Content read')), \
+                 patch.object(Path, 'open', side_effect=AssertionError('Content read')):
+                checks = {'running_services': {'status': 'ok', 'output': ''}, 'docker': docker}
+                result, findings = env_files.collect([str(self.root)], lambda command: self.fail('No systemd units'), checks)
+                self.assertEqual(result['status'], 'ok')
+                self.assertEqual(result['applications']['status'], 'ok')
+                self.assertEqual(result['files'][0]['path'], str(path))
+                self.assertNotIn('applications', result['files'][0])
+                self.assertEqual(findings, [])
+                self.assertNotIn('DO_NOT_COPY', json.dumps(result))
+                self.assertNotIn('secret-test-sentinel', json.dumps(result))
 
 
 if __name__ == '__main__':

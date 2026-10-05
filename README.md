@@ -168,7 +168,7 @@ The shell creates redirected files, so `sudo` alone does not make them private. 
 └── manifest.json      # Export-completion record
 ```
 
-The HTML report includes search, finding filters, coverage and expandable evidence, with light/dark browser preferences and print support. It needs no hosted dashboard or CDN. Keep the bundle together to preserve its JSON download link and completion record.
+The HTML report groups findings by check and known resource, with search, finding filters, coverage and expandable evidence/scope notes. Group/global totals stay fixed while filtering; print includes all findings and scope notes. Older reports remain readable without inferred grouping. Light/dark browser preferences and offline operation need no hosted dashboard or CDN. Keep the bundle together to preserve its JSON download link and completion record.
 
 | Finding | What it means | Your next step |
 | --- | --- | --- |

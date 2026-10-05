@@ -50,7 +50,7 @@ def collect_reboot_state():
     check = {"status": "ok", "output": str(required)}
     findings = []
     if required:
-        findings.append({"level": "REVIEW", "message": "System reports a reboot is required."})
+        findings.append({"level": "REVIEW", "message": "System reports a reboot is required.", "check": "reboot_required"})
     return check, findings
 
 
@@ -61,11 +61,14 @@ def maintenance_findings(checks):
         packages = [line.split("/", 1)[0] for line in updates.get("output", "").splitlines() if "[upgradable from:" in line]
         updates["packages"] = packages
         if packages:
-            findings.append({"level": "REVIEW", "message": f"{len(packages)} package updates available in cached APT metadata. Review and apply relevant updates; security classification is not established."})
+            findings.append({"level": "REVIEW", "message": f"{len(packages)} package updates available in cached APT metadata. Review and apply relevant updates; security classification is not established.", "check": "available_updates"})
     failed = checks.get("failed_services", {})
     if failed.get("status") == "ok":
         units = [line.split()[0] for line in failed.get("output", "").splitlines() if line.strip()]
         failed["units"] = units
         if units:
-            findings.append({"level": "REVIEW", "message": "Failed services: " + ", ".join(units)})
+            finding = {"level": "REVIEW", "message": "Failed services: " + ", ".join(units), "check": "failed_services"}
+            if len(units) == 1:
+                finding.update(resource_type="service", resource_id=units[0], resource_name=units[0])
+            findings.append(finding)
     return findings

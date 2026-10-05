@@ -55,7 +55,7 @@ class RebootFailureTests(unittest.TestCase):
                     self.assertEqual(check, {'status': 'ok', 'output': str(present)})
                     expected_findings = []
                     if present:
-                        expected_findings.append({'level': 'REVIEW', 'message': 'System reports a reboot is required.'})
+                        expected_findings.append({'level': 'REVIEW', 'message': 'System reports a reboot is required.', 'check': 'reboot_required'})
                     self.assertEqual(findings, expected_findings)
 
     def test_inspection_failures_are_errors_not_absence(self):
@@ -84,9 +84,9 @@ class RebootFailureTests(unittest.TestCase):
                 with self.subTest(check=name):
                     self.assertEqual(report['checks'][name], check)
         self.assertEqual(commands, expected_commands)
-        unknown = {'level': 'UNKNOWN', 'message': 'reboot_required: fixture marker denied'}
+        unknown = {'level': 'UNKNOWN', 'message': 'reboot_required: fixture marker denied', 'check': 'reboot_required'}
         self.assertEqual(report['findings'].count(unknown), 1)
-        reboot_review = {'level': 'REVIEW', 'message': 'System reports a reboot is required.'}
+        reboot_review = {'level': 'REVIEW', 'message': 'System reports a reboot is required.', 'check': 'reboot_required'}
         self.assertIn(reboot_review, baseline['findings'])
         self.assertEqual([item for item in report['findings'] if item != unknown],
                          [item for item in baseline['findings'] if item != reboot_review])

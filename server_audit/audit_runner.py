@@ -22,7 +22,7 @@ def summarize(checks):
     for name, check in checks.items():
         if check["status"] == "error" or (check["status"] == "unavailable" and name not in optional):
             detail = check.get("detail") or check.get("output") or "check unavailable"
-            findings.append({"level": "UNKNOWN", "message": f"{name}: {detail}"})
+            findings.append({"level": "UNKNOWN", "message": f"{name}: {detail}", "check": name})
     findings.extend(network_audit.firewall_findings(checks))
     findings.extend(system_audit.maintenance_findings(checks))
     return findings
@@ -44,6 +44,7 @@ def audit(connection=None, ssh_config=None, env_roots=None, git_roots=None, git_
     checks = report["checks"]
     findings = report["findings"]
     if os.geteuid() != 0:
+        # This warning spans several checks and intentionally remains audit-wide.
         findings.append({"level": "UNKNOWN", "message": "Not running as root: SSH configuration, firewall and process ownership checks may be incomplete."})
     checks["os"] = system_audit.collect_os()
     checks["ssh"], ssh_reviews = ssh_audit.collect(run, connection, ssh_config)
