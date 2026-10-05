@@ -11,13 +11,13 @@ from tests import live_ci
 
 
 class LiveCIPolicyTests(unittest.TestCase):
-    def result(self, *, count=4, successful=True, skipped=(), expected=()):
+    def result(self, *, count=5, successful=True, skipped=(), expected=()):
         return SimpleNamespace(testsRun=count, wasSuccessful=lambda: successful,
                                skipped=skipped, expectedFailures=expected)
 
     def test_requires_every_test_to_pass_without_skips_or_expected_failures(self):
         self.assertEqual(live_ci.result_problems(self.result()), [])
-        for arguments in ({'count': 0}, {'count': 3}, {'count': 5},
+        for arguments in ({'count': 0}, {'count': 4}, {'count': 6},
                           {'successful': False}, {'skipped': [('fixture', 'disabled')]},
                           {'expected': [('fixture', 'known failure')]}):
             with self.subTest(arguments=arguments):

@@ -55,7 +55,7 @@ jobs:
         run: |
           if sudo --non-interactive env GITHUB_SHA="$GITHUB_SHA" \
               bash tests/integration_lab.sh --disposable-vm "$(command -v python)"; then
-            echo 'Four live tests passed; lab cleanup completed.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Five live tests passed; lab cleanup completed.' >> "$GITHUB_STEP_SUMMARY"
           else
             status=$?
             echo 'Live integration or its setup/cleanup failed; see the job log.' >> "$GITHUB_STEP_SUMMARY"

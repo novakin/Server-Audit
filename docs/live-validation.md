@@ -2,19 +2,21 @@
 
 [Documentation index](../README.md) · [Development guide](development.md)
 
-Last substantive update: 2026-09-18 (Europe/Berlin).
+Last substantive update: 2026-10-05 (Europe/Berlin), scoped to the EnvironmentFile wildcard fixture and five-test contract; not a new live run.
 
 This page owns current lab preparation, execution and limits. The [original Debian validation](reviews/2026-09-17-debian-live-validation.md) and [Ubuntu CI/hardening review](reviews/2026-09-18-ubuntu-ci-hardening.md) are dated historical evidence. Current action status belongs in linked Issues. CI triggers, security and required-check setup belong in [Continuous integration](development.md#continuous-integration).
 
 ## Automated Ubuntu lab
 
-The `Ubuntu live integration` job in [ci.yml](../.github/workflows/ci.yml) uses a fresh Ubuntu 24.04 hosted VM only after `Linux tests` succeeds. One shared environment runs the four existing native checks. It does not create a managed server, use production credentials or change the auditor's read-only behavior.
+The `Ubuntu live integration` job in [ci.yml](../.github/workflows/ci.yml) uses a fresh Ubuntu 24.04 hosted VM only after `Linux tests` succeeds. One shared environment runs five native checks: SSH, Docker, firewall, sockets and systemd EnvironmentFile references. It does not create a managed server, use production credentials or change the auditor's read-only behavior.
 
 [tests/integration_lab.sh](../tests/integration_lab.sh) owns preparation and cleanup. The VM must have a reachable, empty local Docker daemon; the script refuses existing containers and fixture resources. It installs the native SSH, BusyBox, socket and firewall packages through APT. The image is imported from the installed static BusyBox binary and synthetic files, without a registry pull. Temporary private keys stay under `/opt/lab`, and the fixture authorization file is `/run/server-security-audit-authorized_keys`; neither `/root/.ssh/authorized_keys` nor the normal sshd configuration is replaced. The fixture daemon requires key authentication and listens only on loopback.
 
 Firewall evidence uses a lab-owned nftables table and an unhooked iptables chain. No global flush, default-policy change or hook into live traffic is needed. The disposable VM, rather than an additional namespace/VM service, is the isolation boundary for this hosted job. Docker may create its ordinary container networking rules within that VM.
 
-The script uses bounded readiness checks and traps ordinary exit/interruption to remove only its own daemon, containers, image, rules, keys and files. Cleanup failure prevents success, and does not overwrite an earlier failure with success. Forced termination may prevent traps; GitHub VM disposal is the final cleanup boundary. Installed packages are not uninstalled. Do not upload private keys or complete host reports as artifacts.
+The EnvironmentFile fixture is a synthetic unit linked only under `/run/systemd/system`. It is loaded for native property inspection, never started or enabled; its synthetic environment values are not consumed or exported. Optional/mandatory wildcards, an existing unmatched-bracket literal, optional literal absence and independent file discovery are tested together. Cleanup removes the reserved runtime link and reloads manager metadata before deleting the lab directory. The job records the native systemd version alongside the other tool versions.
+
+The script uses bounded readiness checks and traps ordinary exit/interruption to remove only its own daemon, containers, image, rules, keys, runtime unit link and files. Cleanup failure prevents success, and does not overwrite an earlier failure with success. Forced termination may prevent traps; GitHub VM disposal is the final cleanup boundary. Installed packages are not uninstalled. Do not upload private keys or complete host reports as artifacts.
 
 On a deliberately disposable VM, from the repository root:
 
@@ -22,7 +24,7 @@ On a deliberately disposable VM, from the repository root:
 sudo bash tests/integration_lab.sh --disposable-vm "$(command -v python3)"
 ```
 
-The acknowledgement and marker prevent accidental use; they do not establish isolation. Never use this command on an operational server. The script ends with `python -m tests.live_ci`, which requires the exact four expected identities, all executed, no failures and zero skips/expected failures. Failed preparation fails CI rather than falling back to skipped tests.
+The acknowledgement and marker prevent accidental use; they do not establish isolation. Never use this command on an operational server. The script ends with `python -m tests.live_ci`, which requires the exact five expected identities, all executed, no failures and zero skips/expected failures. Failed preparation fails CI rather than falling back to skipped tests.
 
 The job log records native versions and the tested revision; its summary records completion or failure. This is Ubuntu evidence for that revision/toolchain, not a new Debian or full production-host validation. The [historical Debian results](reviews/2026-09-17-debian-live-validation.md) remain unchanged. CI trigger/security details and required-check configuration have one owner: [Continuous integration](development.md#continuous-integration).
 
@@ -30,7 +32,7 @@ The job log records native versions and the tested revision; its summary records
 
 The same fixture contract targets **Ubuntu and Debian**. The tests do not check a distribution name; they require the native tools and prepared fixtures listed below. The [historical run](reviews/2026-09-17-debian-live-validation.md) establishes its Debian results only. The [Ubuntu acceptance review](reviews/2026-09-18-ubuntu-ci-hardening.md) describes the later four-test hosted run; neither record proves all releases or untested integrations.
 
-Routine GitHub CI runs on Ubuntu 24.04 with `AUDIT_LIVE_INTEGRATION=0`. The four live-test skips mean that the lab has not been provisioned and enabled, **not that Ubuntu is unsupported**. The routine CI runner rejects live activation. Its successful completion enables the separate hosted integration job described above.
+Routine GitHub CI runs on Ubuntu 24.04 with `AUDIT_LIVE_INTEGRATION=0`. The five live-test skips mean that the lab has not been provisioned and enabled, **not that Ubuntu is unsupported**. The routine CI runner rejects live activation. Its successful completion enables the separate hosted integration job described above.
 
 The opt-in tests do not provision a server. Prepare an isolated, disposable Ubuntu or Debian environment first; do not run the fixture setup against a production host. Normal test discovery skips these checks. Explicit activation requires root and `/run/server-security-audit-integration-lab`; the marker is a misuse guard, not an isolation mechanism.
 
@@ -52,7 +54,7 @@ The fixture must provide:
 
 ## Remaining limits
 
-The automated Ubuntu job exercises the four SSH, Docker, firewall and socket tests on its recorded toolchain, not a full production-host audit or a fresh Debian validation. Journal-based key-use correlation, timer metadata, application EnvironmentFiles and standalone Debian boot/service behavior are not established by these four tests. The historical Debian chroot's systemd limitation remains in its [original record](reviews/2026-09-17-debian-live-validation.md#remaining-limits).
+The suite now includes native systemd EnvironmentFile wildcard/property coverage in addition to SSH, Docker, firewall and sockets. The five-test suite must pass on the changed revision before that new native coverage is claimed as verified; the earlier four-test hosted result does not validate it. Journal-based key-use correlation, timer metadata, actual environment loading and standalone Debian boot/service behavior remain outside these tests. This is not a full production-host audit or a fresh Debian validation. The historical Debian chroot's systemd limitation remains in its [original record](reviews/2026-09-17-debian-live-validation.md#remaining-limits).
 
 Firewall tests establish collection of known evidence, not correctness of production filtering. Loopback HTTP success does not establish public exposure. Rootless Docker, other versions/storage drivers, provider firewalls, NAT and remote IPv4/IPv6 reachability remain outside that validation.
 

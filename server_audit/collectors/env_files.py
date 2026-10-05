@@ -104,6 +104,25 @@ def parse_environment_files(value):
     return entries
 
 
+def has_wildcard_reference(path):
+    """Recognize nonempty bracket classes; escaped references are handled separately."""
+    if '*' in path or '?' in path:
+        return True
+    for component in path.split('/'):
+        start = component.find('[')
+        if start == -1:
+            continue
+        start += 1
+        if start < len(component) and component[start] in '!^':
+            start += 1
+        # A leading ']' is a member; a later ']' in this component must close the class.
+        if start < len(component) and component[start] == ']':
+            start += 1
+        if component.find(']', start) != -1:
+            return True
+    return False
+
+
 def application_sources(run, checks):
     sources, references = [], []
     services = checks.get("running_services", {})
@@ -117,6 +136,16 @@ def application_sources(run, checks):
             source["main_pid"] = properties.get("MainPID", "unknown")
             try:
                 source["files"] = parse_environment_files(properties.get("EnvironmentFiles", ""))
+                for entry in source["files"]:
+                    detail = None
+                    if '\\' in entry["path"]:
+                        detail = "Escaped EnvironmentFile reference not evaluated; file presence is unknown."
+                    elif has_wildcard_reference(entry["path"]):
+                        detail = "Wildcard EnvironmentFile reference not evaluated; file presence is unknown."
+                    if detail:
+                        entry.update(status="unknown", detail=detail)
+                        source["status"] = "partial"
+                        partial = True
                 references.extend({**entry, "application": "systemd:" + unit} for entry in source["files"])
             except ValueError as error:
                 source.update(status="unknown", detail=str(error))
@@ -154,6 +183,7 @@ def collect(roots=None, run=None, checks=None):
                   "ACL presence is checked, not effective ACL entries, SELinux/AppArmor policy, directory group membership or application access. Ownership is recorded, not judged without an expected service identity.",
                   "Parent write bits are reviewed; sticky-directory restrictions are noted. Metadata is a point-in-time observation, not proof of web exposure or effective access.",
                   "Application evidence covers running systemd services (up to 100) and inspected Docker containers. Configured sources/counts do not prove what a running process loaded; /proc/*/environ is never read.",
+                  "Systemd EnvironmentFile wildcard or glob-escaped references are retained but not evaluated or inspected as literal paths; optional and mandatory expressions have unknown file presence. Unmatched brackets remain literal. Independent directory discovery remains separate.",
                   "Docker does not retain original --env-file/Compose env_file source paths. Counts include image defaults and configured overrides, not variable names/values. Env-like bind mounts are candidates, not proof of loading.",
                   "Inline systemd Environment values, app-specific config loaders, shell-sourced files, Compose YAML, PM2 and Supervisor configuration are not read. Explicit scan roots replace discovery roots, not application references.",
               ]}
@@ -164,6 +194,12 @@ def collect(roots=None, run=None, checks=None):
             result["status"] = "partial"
         for reference in references:
             path = Path(reference["path"])
+            if reference.get("status") == "unknown":
+                result["status"] = "partial"
+                result["skipped"].append({"path": str(path), "reason": reference["detail"],
+                                          "application": reference["application"], "optional": reference["optional"]})
+                findings.append({"level": "UNKNOWN", "message": f"EnvironmentFile reference {path} for {reference['application']}: {reference['detail']}"})
+                continue
             existing = next((item for item in result["files"] if item["path"] == str(path)), None)
             if existing is not None:
                 existing["applications"].append(reference["application"])

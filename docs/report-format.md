@@ -42,6 +42,12 @@ Entries in `checks.accounts.accounts[].permissions` retain `path`, `mode`, `owne
 
 A failed metadata lookup retains `path` and `unknown` rather than inventing a mode or `unsafe` value. The account collection status remains `ok` for a collected inventory with nested uncertainty; read its findings and permission records. Schema version 1 and existing field types are unchanged. Older reports retain their original findings when rendered; only a new audit uses the corrected interpretation. See [account scope](audit-reference.md#accounts-access-and-ssh-keys).
 
+## Unevaluated systemd environment references
+
+In `checks.environment_files.applications.sources[].files`, wildcard systemd EnvironmentFile references retain `path` and `optional` and add `status: "unknown"` and an explanatory `detail`. Their containing systemd source and application-reference aggregate are `partial`; the environment-file check also becomes `partial` and emits explicit Unknown evidence. A matching file might exist, but an unevaluated pattern establishes neither its presence nor its absence. The `skipped` record retains the pattern, reason, application and optional flag.
+
+Literal optional absence keeps its existing non-failure behavior. Mandatory literal errors remain incomplete. Unmatched brackets and empty/negation-only bracket sequences remain literal and retain inspection/application attribution. Nonempty bracket classes, including leading-`]` classes, are unevaluated; a bracket class cannot span path components. Glob-escaped references are likewise explicitly unknown, with an escape-specific detail, rather than interpreted as literal absence. Independently discovered metadata stays in `files`, without claiming the expression was evaluated or assigning its application by guessed matching. Docker bind paths remain literal, including filenames containing glob characters. No contents are read and no scope, link policy or traversal budgets are expanded. Fields are additive within schema version 1; existing JSON/HTML evidence and text skipped-path output retain the explanation. Older reports are not reinterpreted.
+
 ## Built-in Git secret evidence
 
 `checks.git_secrets` retains the `status`, `repositories` and `limitations` containers. The additive `detector: "builtin"`, `ruleset_version: 2`, `rule_ids` and `limits` identify the implementation and selected bounds even when the check is not requested. A requested scan without the approved local Git reader is `unavailable`, not a clean or skipped scan.
