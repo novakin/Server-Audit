@@ -123,9 +123,10 @@ def collect(run, ssh_output="", *, ssh_check=None):
         else:
             account["sudo_policy"] = {"status": "unknown", "detail": "Root required to query another user's sudo policy"}
         sudo = account["sudo_policy"]
-        if sudo["status"] == "ok" and "may run the following commands" in sudo.get("output", ""):
+        normal_root = user.pw_name == "root" and user.pw_uid == 0
+        if not normal_root and sudo["status"] == "ok" and "may run the following commands" in sudo.get("output", ""):
             findings.append({"level": "REVIEW", "message": f"Account {user.pw_name} has sudo command grants. Review sudo_policy for command scope, run-as users and NOPASSWD rules."})
-        if user.pw_uid == 0 or set(membership) & {"sudo", "admin", "docker", "lxd", "disk"}:
+        if not normal_root and (user.pw_uid == 0 or set(membership) & {"sudo", "admin", "docker", "lxd", "disk"}):
             findings.append({"level": "REVIEW", "message": f"Account {user.pw_name}: UID {user.pw_uid}, privileged groups {membership}. Review intended administrative access."})
         state = account["password_state"].get("output", "").split()
         if len(state) > 1 and state[1] == "NP":

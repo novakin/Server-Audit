@@ -74,6 +74,8 @@ class LiveIntegrationTests(unittest.TestCase):
         root, nobody = check['accounts']
         self.assertEqual(root['key_path_scope']['applicability'], 'selected_context')
         self.assertEqual(root['key_files'], [inventory])
+        self.assertFalse(any(item['message'].startswith(('Account root has sudo command grants.', 'Account root: UID 0,'))
+                             for item in findings))
         self.assertEqual(nobody['key_path_scope']['source'], 'conventional defaults')
         self.assertTrue(all(item['status'] == 'absent' for item in nobody['key_files']))
         self.assertFalse(any('candidate key files for accounts:' in item['message'] for item in findings))
