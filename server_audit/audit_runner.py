@@ -58,7 +58,7 @@ def audit(connection=None, ssh_config=None, env_roots=None, git_roots=None, git_
     checks["reboot_required"], reboot_findings = system_audit.collect_reboot_state()
     findings.extend(reboot_findings)
     try:
-        checks["accounts"], account_findings = collect_accounts(run, checks["ssh"].get("output", "") if checks["ssh"]["status"] == "ok" else "")
+        checks["accounts"], account_findings = collect_accounts(run, ssh_check=checks["ssh"])
         findings.extend(account_findings)
     except (OSError, KeyError) as error:
         checks["accounts"] = {"status": "error", "detail": str(error)}

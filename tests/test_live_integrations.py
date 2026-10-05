@@ -3,8 +3,10 @@
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 import urllib.request
+from unittest.mock import patch
 
 from server_audit.collectors import accounts
 from server_audit.command_runner import run
@@ -36,6 +38,28 @@ class LiveIntegrationTests(unittest.TestCase):
         self.assertEqual(inventory['status'], 'ok')
         self.assertEqual(len(inventory['keys']), 1)
         self.assertTrue(inventory['keys'][0]['fingerprint'].startswith('SHA256:'))
+        other, _ = ssh_audit.collect(run, 'user=nobody,addr=127.0.0.1,host=localhost', '/opt/lab/sshd_config')
+        self.assertEqual(other['status'], 'ok', other.get('detail'))
+        self.assertIn('authorizedkeysfile .ssh/authorized_keys\n', baseline['output'] + '\n')
+        self.assertIn('authorizedkeysfile .ssh/authorized_keys\n', other['output'] + '\n')
+        self.assertIn('authorizedkeysfile /run/server-security-audit-authorized_keys\n', matched['output'] + '\n')
+
+        # Only key validation uses a native command; account/password/history fixtures stay synthetic.
+        def account_command(command, input_text=None):
+            if command[0] == 'ssh-keygen':
+                return run(command, input_text)
+            return {'status': 'ok', 'output': '', 'detail': ''}
+        users = [SimpleNamespace(pw_name=name, pw_uid=uid, pw_gid=uid,
+                                 pw_dir=f'/opt/lab/{name}-home', pw_shell='/bin/bash')
+                 for name, uid in (('root', 0), ('nobody', 1001))]
+        with patch('pwd.getpwall', return_value=users), patch('grp.getgrall', return_value=[]):
+            check, findings = accounts.collect(account_command, ssh_check=matched)
+        root, nobody = check['accounts']
+        self.assertEqual(root['key_path_scope']['applicability'], 'selected_context')
+        self.assertEqual(root['key_files'], [inventory])
+        self.assertEqual(nobody['key_path_scope']['source'], 'conventional defaults')
+        self.assertTrue(all(item['status'] == 'absent' for item in nobody['key_files']))
+        self.assertFalse(any('candidate key files for accounts:' in item['message'] for item in findings))
 
     def test_native_docker_projection_running_stopped_and_redaction(self):
         report, findings = docker_audit.collect(run)

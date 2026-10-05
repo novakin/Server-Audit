@@ -137,7 +137,7 @@ Port 22222
 ListenAddress 127.0.0.1
 HostKey /opt/lab/host_key
 PidFile /opt/lab/sshd.pid
-AuthorizedKeysFile /run/server-security-audit-authorized_keys
+AuthorizedKeysFile .ssh/authorized_keys
 PermitRootLogin prohibit-password
 AuthenticationMethods publickey
 PubkeyAuthentication yes
@@ -151,6 +151,7 @@ PrintMotd no
 LogLevel VERBOSE
 Match User root Address 127.0.0.1
     AllowTcpForwarding yes
+    AuthorizedKeysFile /run/server-security-audit-authorized_keys
 CONFIG
 sshd -t -f "$lab/sshd_config"
 /usr/sbin/sshd -D -e -f "$lab/sshd_config" > "$results/sshd.log" 2>&1 &

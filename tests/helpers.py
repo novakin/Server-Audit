@@ -45,8 +45,9 @@ def fixture_report():
         assert 'running_services' in checks and 'docker' in checks
         return {'status': 'partial', 'files': []}, [{'level': 'UNKNOWN', 'message': 'Fixture environment coverage incomplete.'}]
 
-    with patch('server_audit.audit_runner.run', side_effect=run), patch('server_audit.collectors.system_audit.Path', HostPath), patch('server_audit.audit_runner.os.geteuid', return_value=1000, create=True), patch('server_audit.audit_runner.platform.node', return_value='fixture-host'), patch('server_audit.audit_runner.collect_accounts', side_effect=OSError('Fixture account access denied')), patch('server_audit.audit_runner.collect_env_files', side_effect=environment), patch('server_audit.audit_runner.collect_scheduled_tasks', return_value=({'status': 'ok', 'cron_files': []}, [])):
+    with patch('server_audit.audit_runner.run', side_effect=run), patch('server_audit.collectors.system_audit.Path', HostPath), patch('server_audit.audit_runner.os.geteuid', return_value=1000, create=True), patch('server_audit.audit_runner.platform.node', return_value='fixture-host'), patch('server_audit.audit_runner.collect_accounts', side_effect=OSError('Fixture account access denied')) as account_collector, patch('server_audit.audit_runner.collect_env_files', side_effect=environment), patch('server_audit.audit_runner.collect_scheduled_tasks', return_value=({'status': 'ok', 'cron_files': []}, [])):
         report = audit_runner.audit('user=alice,addr=192.0.2.1', '/etc/ssh/custom.conf', ['/srv/app'])
+        account_collector.assert_called_once_with(audit_runner.run, ssh_check=report['checks']['ssh'])
     # The separately requested scheduled-task feature adds a check, not changes to existing checks.
     report['checks'].pop('scheduled_tasks')
     report['timestamp_utc'] = '2026-09-17T00:00:00+00:00'

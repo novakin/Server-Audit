@@ -12,6 +12,7 @@ from unittest.mock import patch
 from server_audit.collectors import accounts
 from server_audit.command_runner import run
 from server_audit.reporting import account_text_report
+from server_audit.reporting import render_html
 
 
 class UsageTests(unittest.TestCase):
@@ -30,6 +31,92 @@ class UsageTests(unittest.TestCase):
 
     def test_missing_history_does_not_invent_usage(self):
         self.assertEqual(accounts.login_events(''), [])
+
+
+@unittest.skipUnless(platform.system() == 'Linux', 'Linux account database')
+class ScopeTests(unittest.TestCase):
+    def collect(self, context=None, output='authorizedkeysfile /synthetic/alice-only.keys', status='ok', fallback_keys=True):
+        users = [SimpleNamespace(pw_name=name, pw_uid=uid, pw_gid=uid,
+                                 pw_dir=f'/synthetic/{name}', pw_shell='/bin/bash')
+                 for name, uid in (('alice', 1001), ('bob', 1002))]
+        def inventory(path, run):
+            if not fallback_keys and str(path) != '/synthetic/alice-only.keys':
+                return {'path': str(path), 'status': 'absent', 'keys': []}
+            return {'path': str(path), 'status': 'ok', 'keys': [
+                {'line': 1, 'type': 'ssh-rsa', 'bits': 1024,
+                 'fingerprint': 'SHA256:SyntheticKey', 'last_observed_use': None}]}
+        scope = {'status': status, 'output': output, 'configuration_source': 'custom',
+                 'configuration_path': '/synthetic/<fixture>.conf', 'connection_context': context}
+        with patch('pwd.getpwall', return_value=users), patch('grp.getgrall', return_value=[]), \
+             patch.object(accounts.os, 'geteuid', return_value=0), \
+             patch.object(accounts, 'key_inventory', side_effect=inventory) as inspect, \
+             patch.object(accounts, 'permission_info', side_effect=lambda path, uid: {'path': str(path)}):
+            check, findings = accounts.collect(
+                lambda command: {'status': 'ok', 'output': '', 'detail': ''}, ssh_check=scope)
+        return check, findings, [str(call.args[0]) for call in inspect.call_args_list]
+
+    def test_user_context_is_not_attributed_to_other_accounts_and_fallback_observations_survive(self):
+        check, findings, paths = self.collect('user=alice,addr=192.0.2.1')
+        alice, bob = check['accounts']
+        self.assertEqual([item['path'] for item in alice['key_files']], ['/synthetic/alice-only.keys'])
+        self.assertEqual([item['path'] for item in bob['key_files']],
+                         ['/synthetic/bob/.ssh/authorized_keys', '/synthetic/bob/.ssh/authorized_keys2'])
+        self.assertEqual(paths.count('/synthetic/alice-only.keys'), 1)
+        self.assertEqual(alice['key_path_scope']['applicability'], 'selected_context')
+        self.assertEqual(bob['key_path_scope']['applicability'], 'unknown')
+        self.assertEqual(bob['key_path_scope']['source'], 'conventional defaults')
+        self.assertTrue(any('bob: weak/obsolete key' in item['message'] for item in findings))
+        shared = [item['message'] for item in findings if 'candidate key files for accounts:' in item['message']]
+        self.assertEqual(len(shared), 1)  # Same key was independently observed in Bob's fallback files.
+        self.assertIn('Effective authorization across these accounts is unverified', shared[0])
+        self.assertTrue(any(item['level'] == 'UNKNOWN' and 'applicability unverified for: bob.' in item['message']
+                            for item in findings))
+        self.assertEqual(check['ssh_scope']['connection_context'], 'user=alice,addr=192.0.2.1')
+        self.assertEqual(check['ssh_scope']['configuration_path'], '/synthetic/<fixture>.conf')
+
+    def test_alice_only_file_cannot_create_a_shared_key_finding_for_bob(self):
+        check, findings, _ = self.collect('user=alice', fallback_keys=False)
+        self.assertEqual(len(check['accounts'][0]['key_files'][0]['keys']), 1)
+        self.assertTrue(all(not item['keys'] for item in check['accounts'][1]['key_files']))
+        self.assertFalse(any('candidate key files for accounts:' in item['message'] for item in findings))
+
+    def test_context_without_user_and_no_context_keep_qualified_candidate_inventory(self):
+        for context in (None, 'addr=192.0.2.1,host=client.example', 'user=alice,user=bob'):
+            with self.subTest(context=context):
+                check, findings, paths = self.collect(context)
+                self.assertEqual(paths, ['/synthetic/alice-only.keys'] * 2)
+                self.assertTrue(all(account['key_path_scope']['applicability'] == 'unknown'
+                                    for account in check['accounts']))
+                self.assertTrue(any(item['level'] == 'UNKNOWN' and 'applicability unverified for: alice, bob.' in item['message']
+                                    for item in findings))
+                self.assertFalse(any('shared across accounts:' in item['message'] for item in findings))
+
+    def test_missing_and_failed_settings_keep_attempted_scope_and_conventional_inventory(self):
+        for status, output in (('error', 'authorizedkeysfile /synthetic/alice-only.keys'),
+                               ('unavailable', ''), ('ok', 'port 22')):
+            with self.subTest(status=status):
+                check, findings, paths = self.collect('user=alice', output, status)
+                self.assertNotIn('/synthetic/alice-only.keys', paths)
+                self.assertEqual(len(paths), 4)
+                self.assertEqual(check['ssh_scope']['status'], status)
+                self.assertEqual(check['ssh_scope']['connection_context'], 'user=alice')
+                self.assertTrue(all(account['key_path_scope']['source'] == 'conventional defaults'
+                                    for account in check['accounts']))
+                self.assertTrue(any(item['level'] == 'UNKNOWN' and 'applicability unverified' in item['message']
+                                    for item in findings))
+
+    def test_none_applies_only_to_selected_user_and_scopes_survive_all_formats(self):
+        check, findings, paths = self.collect('user=alice,host=<fixture>', 'authorizedkeysfile none')
+        self.assertEqual(check['accounts'][0]['key_files'], [])
+        self.assertEqual(len(check['accounts'][1]['key_files']), 2)
+        self.assertFalse(any('/alice/' in path for path in paths))
+        self.assertEqual(json.loads(json.dumps(check)), check)
+        text = account_text_report(check)
+        self.assertIn('user=alice,host=<fixture>', text)
+        self.assertIn('Key-path scope:', text)
+        html = render_html({'checks': {'accounts': check}, 'findings': findings})
+        self.assertIn('user=alice,host=&lt;fixture&gt;', html)
+        self.assertIn('key_path_scope', html)
 
 
 @unittest.skipUnless(platform.system() == 'Linux', 'Linux ownership and OpenSSH integration')
@@ -216,7 +303,9 @@ class KeyTests(unittest.TestCase):
         alice, bob = report['accounts']
         self.assertIsNotNone(alice['key_files'][0]['keys'][0]['last_observed_use'])
         self.assertIsNone(bob['key_files'][0]['keys'][0]['last_observed_use'])
-        self.assertTrue(any('shared across accounts' in item['message'] for item in findings))
+        self.assertTrue(any('observed in candidate key files for accounts: alice, bob' in item['message']
+                            and 'authorization across these accounts is unverified' in item['message']
+                            for item in findings))
         self.assertEqual(alice['password_state']['output'].split()[1], 'L')
         text = account_text_report(report)
         self.assertIn('last observed use=unknown', text)
