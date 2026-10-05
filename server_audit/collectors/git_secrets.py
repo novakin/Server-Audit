@@ -339,9 +339,13 @@ def collect(roots=None, scan_seconds=SCAN_SECONDS):
         result['repositories'].append(repository)
         if repository['status'] != 'ok':
             result['status'] = 'partial'
-            findings.append({'level': 'UNKNOWN', 'message': f"Git {repository['path']}: incomplete local secret inspection. See repository issues and limits."})
+            findings.append({'level': 'UNKNOWN', 'message': f"Git {repository['path']}: incomplete local secret inspection. See repository issues and limits.",
+                             'check': 'git_secrets', 'resource_type': 'repository',
+                             'resource_id': repository['path'], 'resource_name': repository['path']})
         for scan in repository['scans']:
             for detection in scan['detections']:
                 findings.append({'level': 'REVIEW', 'message':
-                    f"Git {repository['path']}: possible secret ({detection['rule']}) in {detection['file']}:{detection['start_line']} [{scan['mode']}]. Verify locally; if genuine, revoke/rotate it and investigate exposure."})
+                    f"Git {repository['path']}: possible secret ({detection['rule']}) in {detection['file']}:{detection['start_line']} [{scan['mode']}]. Verify locally; if genuine, revoke/rotate it and investigate exposure.",
+                    'check': 'git_secrets', 'resource_type': 'repository',
+                    'resource_id': repository['path'], 'resource_name': repository['path']})
     return result, findings

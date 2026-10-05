@@ -34,6 +34,13 @@ INSPECT_FORMAT += ',"mounts":[{{range $i,$m := .Mounts}}{{if $i}},{{end}}{"type"
 INSPECT_FORMAT += ',"networks":[{{$first := true}}{{range $name,$n := .NetworkSettings.Networks}}{{if not $first}},{{end}}{{$first = false}}{"name":{{json $name}},"ipv4":{{json $n.IPAddress}},"ipv6":{{json $n.GlobalIPv6Address}}}{{end}}]}'
 
 
+def _finding(level, message, identifier=None, name=None):
+    finding = {"level": level, "message": message, "check": "docker"}
+    if identifier:
+        finding.update(resource_type="container", resource_id=identifier, resource_name=name or identifier)
+    return finding
+
+
 def findings_for(container):
     reasons = []
     if container.get("privileged"):
@@ -75,7 +82,7 @@ def findings_for(container):
     if container.get("status") == "exited" and container.get("exit_code"):
         reasons.append(f"container exited with code {container['exit_code']}")
     name = container.get("name") or container.get("id", "unknown")
-    return [{"level": "REVIEW", "message": f"Docker {name}: {reason}."} for reason in reasons]
+    return [_finding("REVIEW", f"Docker {name}: {reason}.", container.get("id"), name) for reason in reasons]
 
 
 def collect(run):
@@ -101,7 +108,7 @@ def collect(run):
         result = run(DOCKER + ["inspect", "--type", "container", "--format", INSPECT_FORMAT, identifier])
         if result["status"] != "ok":
             containers.append({"id": identifier, "inspection_status": "error", "detail": result.get("detail", "Inspection failed")})
-            findings.append({"level": "UNKNOWN", "message": f"Docker {identifier[:12]} inspection failed; container may have disappeared or access was denied."})
+            findings.append(_finding("UNKNOWN", f"Docker {identifier[:12]} inspection failed; container may have disappeared or access was denied.", identifier))
             continue
         try:
             container = json.loads(result["output"])
@@ -109,7 +116,7 @@ def collect(run):
                 raise ValueError("Unexpected container identity")
         except (ValueError, KeyError):
             containers.append({"id": identifier, "inspection_status": "error", "detail": "Invalid projected inspect output"})
-            findings.append({"level": "UNKNOWN", "message": f"Docker {identifier[:12]} returned invalid inspection output."})
+            findings.append(_finding("UNKNOWN", f"Docker {identifier[:12]} returned invalid inspection output.", identifier))
             continue
         # Keep only the allowlisted projection even if a CLI returns extra fields.
         container = {key: value for key, value in container.items() if key in FIELDS or key in {"health", "mounts", "networks", "environment_variable_count"}}

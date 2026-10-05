@@ -8,6 +8,8 @@ results belong in the linked PRs and dated reviews.
 
 ### Added
 
+- Optional finding resource metadata and grouped offline HTML, preserving full messages, levels, duplicates, flat JSON and legacy fallback. Search covers resource metadata; filters retain fixed totals and print restores complete groups ([Issue #31](https://github.com/novakin/Server-Audit/issues/31)).
+- Explicit socket parser counts/Unknown coverage and Docker application-reference explanations/counts, retaining valid inventories, independent environment-file discovery and existing aggregate status semantics ([Issue #27](https://github.com/novakin/Server-Audit/issues/27), [Issue #28](https://github.com/novakin/Server-Audit/issues/28)).
 - Routine Linux CI and dependent Ubuntu SSH/Docker/firewall/socket integration checks ([PR #7](https://github.com/novakin/Server-Audit/pull/7), [PR #10](https://github.com/novakin/Server-Audit/pull/10)). Required-check enforcement is a separate administrative action.
 - Documentation consistency and action/evidence ownership rules, a follow-up Issue template, and dated review records. Issues own actionable work; PR descriptions own change-specific acceptance. See the [development procedure](docs/development.md#documentation-maintenance).
 
@@ -18,6 +20,10 @@ results belong in the linked PRs and dated reviews.
 
 ### Fixed
 
+- Cron script extraction withholds shell tails and percent-delimited stdin instead of exporting assignment values as paths; literal references and timer argv retain their separate semantics. Dangling main-crontab links and metadata failures remain explicit partial/Unknown evidence ([Issue #38](https://github.com/novakin/Server-Audit/issues/38), [Issue #39](https://github.com/novakin/Server-Audit/issues/39)).
+- Ordinary native output is capped during concurrent capture at 8 MiB stdout and 1 MiB stderr. Timeout/overflow/capture failure withholds partial streams; cancellation stops/reaps the owned group and unconfirmed shutdown aborts ([Issue #12](https://github.com/novakin/Server-Audit/issues/12)).
+- Capture time displays as one UTC date/time line where space permits, matching the machine timestamp.
+- General scope boundaries remain visible while full collector limitations use expandable topics; print includes all notes without removing duplicates.
 - Docker listing validation now retains earlier container inventory and findings when a later ID is malformed, stops further inspection and preserves explicit error/Unknown coverage reporting. Error results retain endpoint and limitations for JSON/HTML/text compatibility; malformed listing text and excluded inspect fields remain unexported ([Issue #26](https://github.com/novakin/Server-Audit/issues/26)).
 - The account named exactly `root` with UID `0` retains its full inventory without the two generic sudo/privilege Review findings. Other administrative identities, service accounts and specific root concerns remain visible ([Issue #30](https://github.com/novakin/Server-Audit/issues/30), account portion only).
 - Environment-file read advice now describes group/other read bits and makes confidentiality restrictions conditional while preserving required service access. Write/integrity, ancestor, executable/special, ACL and coverage findings remain visible; metadata-only collection and file references are unchanged ([Issue #30](https://github.com/novakin/Server-Audit/issues/30)).

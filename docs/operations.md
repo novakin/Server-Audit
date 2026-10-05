@@ -58,6 +58,10 @@ Root improves coverage; unprivileged runs are allowed but record incomplete visi
 
 New external-tool integrations require explicit user approval before implementation; see [agent approval rules](../AGENTS.md#external-tool-approval). The existing native tools in this table remain in scope. Install missing approved tools only through your normal host administration process when coverage requires them. Gitleaks is no longer required. The audit neither installs tools nor starts services. Executables resolve from `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`; a tool available only in your interactive shell may be unavailable to the audit.
 
+Ordinary native output is capped during capture at 8 MiB stdout and 1 MiB stderr per command, with a 30-second execution/capture deadline. These generous fixed limits bound host inventory output without adding a tuning interface. An unusually large legitimate result can exceed them: the report then records an error and withholds both streams rather than presenting partial evidence as a successful inventory. Normal nonzero results retain bounded diagnostics. Cancellation stops/reaps the owned command group and aborts report generation; unconfirmed shutdown is fatal. Cleanup has its own bounded allowance, and the audit has no whole-run deadline. See [capture and parser semantics](report-format.md#native-command-capture-and-parser-coverage); Git inspection uses its separate limits.
+
+The sequential host CLI defers its normal Python Ctrl+C handler during process construction until the child has an owned cleanup guard, then restores/replays cancellation. Existing ignored/custom handlers and non-main-thread callers retain their signal policy; this is not a guarantee against forced termination or arbitrary exceptions inside native process creation.
+
 ## First run
 
 ```bash

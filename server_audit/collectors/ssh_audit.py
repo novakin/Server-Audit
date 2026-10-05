@@ -1,7 +1,18 @@
 """SSH configuration collection and policy review."""
 
+import json
 
-def ssh_findings(output):
+
+def _finding(message, config, connection):
+    finding = {"level": "REVIEW", "message": message, "check": "ssh"}
+    if config or connection:
+        finding.update(resource_type="ssh_configuration",
+                       resource_id=json.dumps([config, connection], separators=(",", ":")),
+                       resource_name=(config or "sshd default configuration") + (" (" + connection + ")" if connection else ""))
+    return finding
+
+
+def ssh_findings(output, *, config=None, connection=None):
     settings = dict(line.split(None, 1) for line in output.splitlines() if len(line.split(None, 1)) == 2)
     findings = []
     forwarding_disabled = settings.get("disableforwarding") == "yes"
@@ -16,9 +27,9 @@ def ssh_findings(output):
             continue
         value = settings.get(key)
         if value is not None and value not in safe:
-            findings.append({"level": "REVIEW", "message": f"SSH {key}={value}. {advice}"})
+            findings.append(_finding(f"SSH {key}={value}. {advice}", config, connection))
     if settings.get("kbdinteractiveauthentication") == "yes":
-        findings.append({"level": "REVIEW", "message": "SSH keyboard-interactive authentication enabled; inspect PAM/MFA policy before changing it."})
+        findings.append(_finding("SSH keyboard-interactive authentication enabled; inspect PAM/MFA policy before changing it.", config, connection))
     selected = {key: value for key, value in settings.items() if key in {
         "port", "listenaddress", "permitrootlogin", "passwordauthentication",
         "pubkeyauthentication", "kbdinteractiveauthentication", "usepam",
@@ -40,7 +51,7 @@ def collect(run, connection=None, config=None):
                  configuration_path=config or None, connection_context=connection or None)
     findings = []
     if check["status"] == "ok":
-        settings, findings = ssh_findings(check["output"])
+        settings, findings = ssh_findings(check["output"], config=config, connection=connection)
         check["selected_settings"] = settings
         # Keep legacy scalar values; this additive map preserves every occurrence.
         values = {}

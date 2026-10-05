@@ -42,6 +42,78 @@ def table(headers, rows, empty, badge_columns=()):
     return f'<div class="table-scroll" role="region" aria-label="{escape(headers[0])} inventory" tabindex="0"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
+def finding_groups(findings):
+    """Group explicit metadata without changing, inferring or deduplicating findings."""
+    groups = {}
+    for index, item in enumerate(findings):
+        check = item.get('check')
+        if not isinstance(check, str) or not check:
+            check = None
+        resource_type, resource_id = item.get('resource_type'), item.get('resource_id')
+        identity = None
+        if check and all(isinstance(value, str) and value for value in (resource_type, resource_id)):
+            identity = (resource_type, resource_id)
+        resources = groups.setdefault(check, {})
+        resources.setdefault(identity, []).append((index, item))
+    return groups
+
+
+def finding_totals(items):
+    counts = {level: sum(item.get('level') == level for item in items) for level in ('REVIEW', 'UNKNOWN')}
+    return '<span class="finding-totals"><span>Totals:</span> ' + ' '.join(
+        f'<span class="count-pill {level.lower()}{" zero" if counts[level] == 0 else ""}">{counts[level]} {label}</span>'
+        for level, label in (('REVIEW', 'Review'), ('UNKNOWN', 'Unknown'))
+    ) + '</span>'
+
+
+def render_findings(findings):
+    if not findings:
+        return '<p class="empty">No findings were recorded. This does not establish that the host is secure.</p>'
+    sections = []
+    for group_index, (check, resources) in enumerate(finding_groups(findings).items()):
+        title = CHECK_NAMES.get(check, check.replace('_', ' ').capitalize()) if check else 'General findings'
+        all_items = [item for rows in resources.values() for _, item in rows]
+        sections.append(f'<section class="finding-check" aria-labelledby="finding-check-{group_index}"><div class="finding-group-header"><h3 id="finding-check-{group_index}">{escape(title)}</h3>{finding_totals(all_items)}</div>')
+        for resource_index, (identity, rows) in enumerate(resources.items()):
+            name = 'General'
+            if identity:
+                candidate = rows[0][1].get('resource_name')
+                name = candidate if isinstance(candidate, str) and candidate else identity[1]
+            heading = f'finding-resource-{group_index}-{resource_index}'
+            if identity or len(resources) > 1:
+                sections.append(f'<div class="finding-resource" aria-labelledby="{heading}"><div class="finding-resource-header"><h4 id="{heading}">{escape(name)}</h4>{finding_totals([item for _, item in rows])}</div><ul class="findings">')
+            else:
+                sections.append('<div class="finding-resource"><ul class="findings">')
+            for index, item in rows:
+                search = name + ' ' + ' '.join(str(item.get(key, '')) for key in ('check', 'resource_type', 'resource_id', 'resource_name'))
+                level = item.get('level', 'UNKNOWN')
+                sections.append(f'<li class="finding" data-finding-index="{index}" data-search="{escape(search)}" data-level="{escape(level)}">{badge(level)}<p>{escape(item.get("message", ""))}</p></li>')
+            sections.append('</ul></div>')
+        sections.append('</section>')
+    return ''.join(sections)
+
+
+def application_coverage_text(applications):
+    coverage = applications.get('docker_coverage')
+    if not coverage:
+        return ''
+    return (str(coverage.get('detail', 'Docker application coverage unknown.')) +
+            f" Successfully inspected {coverage.get('containers_inspected', 0)} of {coverage.get('containers_retained', 0)} retained containers. " +
+            'Directory discovery is independent; application status does not certify complete Docker references.')
+
+
+def render_limitations(report):
+    """Keep general boundaries visible and full collector limits under their owner."""
+    sections = ['<ul class="limitations">' + ''.join(f'<li>{escape(item)}</li>' for item in report.get('limitations', [])) + '</ul>']
+    for name, check in report.get('checks', {}).items():
+        limits = check.get('limitations', [])
+        if limits:
+            title = CHECK_NAMES.get(name, name.replace('_', ' ').capitalize())
+            items = ''.join(f'<li>{escape(item)}</li>' for item in limits)
+            sections.append(f'<details class="limitation-topic"><summary><span>{escape(title)}</span><span class="badge neutral">{len(limits)} scope notes</span></summary><ul class="limitations">{items}</ul></details>')
+    return ''.join(sections)
+
+
 def render_html(report):
     timestamp = str(report.get("timestamp_utc", "Unknown"))
     try:
@@ -49,7 +121,7 @@ def render_html(report):
         if captured.tzinfo is None:
             raise ValueError("Timestamp must include timezone")
         captured = captured.astimezone(datetime.timezone.utc)
-        display_timestamp = captured.strftime("%d %b %Y") + "<br>" + captured.strftime("%H:%M:%S UTC")
+        display_timestamp = captured.strftime("%d %b %Y - %H:%M:%S UTC")
     except ValueError:
         display_timestamp = escape(timestamp)
     checks = report.get("checks", {})
@@ -57,10 +129,7 @@ def render_html(report):
     review = sum(item.get("level") == "REVIEW" for item in findings)
     unknown = sum(item.get("level") == "UNKNOWN" for item in findings)
     collected = sum(check.get("status") == "ok" for check in checks.values())
-    finding_rows = ''.join(
-        f'<li class="finding" data-level="{escape(item.get("level", "UNKNOWN"))}">{badge(item.get("level", "UNKNOWN"))}<p>{escape(item.get("message", ""))}</p></li>'
-        for item in findings
-    ) or '<li class="empty">No findings were recorded. This does not establish that the host is secure.</li>'
+    finding_rows = render_findings(findings)
     coverage = ''.join(
         f'<a class="coverage-item" href="#check-{index}"><span>{escape(CHECK_NAMES.get(name, name.replace("_", " ").capitalize()))}</span>{badge(check.get("status", "unknown"))}</a>'
         for index, (name, check) in enumerate(checks.items())
@@ -99,12 +168,13 @@ def render_html(report):
     if docker.get("status") == "skipped":
         docker_empty = docker.get("detail", "Docker audit skipped. See collection evidence for the reason.")
     container_table = table(["Container", "Image", "State", "Health", "Configured user", "Published bindings"], container_rows, docker_empty)
-    limitations = list(report.get("limitations", []))
     environment = checks.get("environment_files", {})
     environment_table = table(["Environment file", "Mode", "Owner / group", "Extended ACL", "Inspection"], [
         [item.get("path", "Unknown"), item.get("mode", "Unknown"), str(item.get("owner", item.get("uid", "Unknown"))) + " / " + str(item.get("group", item.get("gid", "Unknown"))), item.get("extended_acl", "Not inspected"), item.get("status", "Unknown")]
         for item in environment.get("files", [])
     ], "No candidates recorded in the scanned scope. Review roots and skipped paths in evidence; this is not a host-wide absence check.")
+    applications = environment.get('applications', {})
+    application_coverage = application_coverage_text(applications)
     application_table = table(["Application", "Source", "Configured variables", "File references", "Collection"], [
         [source.get("name", "Unknown"), source.get("kind", "Unknown"), source.get("configured_variable_count") if source.get("configured_variable_count") is not None else "Not collected",
          "; ".join(item.get("path", "Unknown") for item in source.get("files", [])) or "None reported", source.get("status", "Unknown")]
@@ -139,16 +209,15 @@ def render_html(report):
          str(item.get('observation', 'unknown')) + ' — ' + str(item.get('reason', '')), '; '.join(item.get('local_candidates', [])) or 'No same-port candidate in snapshot']
         for item in external.get('observations', [])
     ], 'No external probe results imported. Internet exposure remains unknown.', badge_columns=(2,))
-    for check in checks.values():
-        limitations.extend(check.get("limitations", []))
     template = Template(Path(__file__).with_name("templates").joinpath("report_template.html").read_text(encoding="utf-8"))
     return template.substitute(
         host=escape(report.get("host", "Unknown host")), timestamp=display_timestamp,
         review=review, unknown=unknown, collected=collected, total=len(checks), findings_count=len(findings),
         finding_rows=finding_rows, coverage=coverage, evidence=evidence, port_table=port_table,
         account_table=account_table, container_table=container_table, environment_table=environment_table,
-        application_table=application_table, git_table=git_table, scheduled_table=scheduled_table, external_table=external_table,
-        limitations=''.join(f'<li>{escape(item)}</li>' for item in limitations),
+        application_table=application_table, application_coverage=f'<p class="note">{escape(application_coverage)}</p>' if application_coverage else '',
+        git_table=git_table, scheduled_table=scheduled_table, external_table=external_table,
+        limitations=render_limitations(report),
         schema=escape(report.get("schema_version", 1)),
     )
 
@@ -227,6 +296,9 @@ def docker_text_report(check):
 
 def env_text_report(check):
     lines = ["Roots: " + ", ".join(root["path"] + " (" + root["status"] + ")" for root in check["roots"])]
+    coverage = application_coverage_text(check.get('applications', {}))
+    if coverage:
+        lines.append(coverage)
     for source in check.get("applications", {}).get("sources", []):
         lines.append(f"Application {source['kind']}:{source['name']} | {source['status']} | {len(source['files'])} referenced file(s)" + (f" | configured variable count: {source.get('configured_variable_count')}" if source['kind'] == 'docker' else ''))
     lines.extend(f"{item['path']} | {item['mode']} | {item['owner']}:{item['group']} | {item['status']} | ACL {item.get('extended_acl', 'not inspected')}" for item in check["files"])

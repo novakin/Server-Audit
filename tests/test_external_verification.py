@@ -143,6 +143,54 @@ class ExternalVerificationTests(unittest.TestCase):
         self.assertIn('&lt;img', reporting.render_html(merged))
         self.assertEqual(merged['summary'], {'REVIEW': 1, 'UNKNOWN': 1})
 
+    def test_new_endpoint_metadata_preserves_legacy_entries_and_order(self):
+        report = audit_fixture()
+        legacy = {'level': 'UNKNOWN', 'message': 'Legacy finding contains TCP 8.8.8.8:443 without attribution.'}
+        attributed = {'level': 'REVIEW', 'message': 'Existing metadata stays exact.',
+                      'check': 'docker', 'resource_type': 'container', 'resource_id': 'full-id', 'resource_name': 'web'}
+        report['findings'] = [legacy, attributed, copy.deepcopy(legacy)]
+        report['summary'] = {'REVIEW': 1, 'UNKNOWN': 2}
+        original = copy.deepcopy(report)
+        probe = probe_fixture(report)
+        merged = external.merge(report, [probe])
+        self.assertEqual(report, original)
+        self.assertEqual(merged['findings'][:3], original['findings'])
+        self.assertEqual(merged['findings'][3:], [
+            {
+                'level': 'REVIEW',
+                'message': f"TCP 8.8.8.8:443 externally reachable from {probe['location']} at {probe['results'][0]['observed_at_utc']}; service/host mapping is unverified.",
+                'check': 'external_verification', 'resource_type': 'endpoint',
+                'resource_id': 'tcp:8.8.8.8:443', 'resource_name': 'TCP 8.8.8.8:443',
+            },
+            {
+                'level': 'UNKNOWN',
+                'message': 'External verification includes untested ports, local/network errors, nonpublic targets or an unconfirmed independent source. Review raw observations and scope.',
+                'check': 'external_verification',
+            },
+        ])
+        self.assertEqual(merged['summary'], {'REVIEW': 2, 'UNKNOWN': 3})
+
+    def test_ipv6_endpoint_identity_is_unambiguous_without_changing_message(self):
+        report = audit_fixture()
+        probe = probe_fixture(report, target='2606:4700:4700::1111')
+        finding = external.merge(report, [probe])['findings'][0]
+        self.assertEqual(finding['resource_id'], 'tcp:[2606:4700:4700::1111]:443')
+        self.assertEqual(finding['resource_name'], 'TCP [2606:4700:4700::1111]:443')
+        self.assertEqual(finding['message'],
+                         f"TCP 2606:4700:4700::1111:443 externally reachable from {probe['location']} at {probe['results'][0]['observed_at_utc']}; service/host mapping is unverified.")
+
+    def test_same_endpoint_across_probes_keeps_each_source_observation(self):
+        report = audit_fixture()
+        probes = [probe_fixture(report), probe_fixture(report)]
+        probes[1]['location'] = 'second declared source'
+        findings = external.merge(report, probes)['findings']
+        self.assertEqual([finding['level'] for finding in findings], ['REVIEW', 'REVIEW', 'UNKNOWN'])
+        self.assertEqual(findings[0]['resource_id'], findings[1]['resource_id'])
+        for index, probe in enumerate(probes):
+            self.assertEqual(findings[index]['message'],
+                             f"TCP 8.8.8.8:443 externally reachable from {probe['location']} at {probe['results'][0]['observed_at_utc']}; service/host mapping is unverified.")
+        self.assertEqual(set(findings[2]), {'level', 'message', 'check'})
+
     def test_negative_results_never_claim_protection(self):
         report = audit_fixture()
         for observation in ('refused', 'timeout', 'local_or_network_error'):
@@ -182,6 +230,9 @@ class ExternalVerificationTests(unittest.TestCase):
         report['timestamp_utc'] = '2000-01-01T00:00:00+00:00'
         merged = external.merge(report, [probe_fixture(report)])
         self.assertTrue(any('fresh audit' in item['message'] for item in merged['findings']))
+        self.assertEqual([finding['level'] for finding in merged['findings']], ['UNKNOWN', 'REVIEW', 'UNKNOWN'])
+        self.assertEqual(set(merged['findings'][0]), {'level', 'message', 'check'})
+        self.assertEqual(merged['findings'][0]['check'], 'external_verification')
 
     def test_input_size_duplicate_keys_and_nonobjects_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

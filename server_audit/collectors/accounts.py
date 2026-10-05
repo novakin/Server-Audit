@@ -9,6 +9,15 @@ import stat
 from pathlib import Path
 
 
+def _finding(level, message, user=None, fingerprint=None):
+    finding = {"level": level, "message": message, "check": "accounts"}
+    if fingerprint:
+        finding.update(resource_type="ssh_key", resource_id=fingerprint, resource_name=fingerprint)
+    elif user is not None:
+        finding.update(resource_type="account", resource_id=user, resource_name=user)
+    return finding
+
+
 def permission_info(path, uid):
     try:
         info = path.lstat()
@@ -108,7 +117,7 @@ def collect(run, ssh_output="", *, ssh_check=None):
     events = login_events(journal.get("output", "")) if journal["status"] == "ok" else []
     usage = {"status": journal["status"], "detail": journal.get("detail", ""), "window": "Last 30 days, at most 10000 journal entries", "matched_events": len(events)}
     if journal["status"] != "ok" or journal.get("detail") or os.geteuid() != 0:
-        findings.append({"level": "UNKNOWN", "message": "SSH key usage history may be incomplete or unavailable; inspect account key_usage evidence and journal permissions."})
+        findings.append(_finding("UNKNOWN", "SSH key usage history may be incomplete or unavailable; inspect account key_usage evidence and journal permissions."))
     groups = grp.getgrall()
     users = pwd.getpwall()
     fingerprints = {}
@@ -125,12 +134,12 @@ def collect(run, ssh_output="", *, ssh_check=None):
         sudo = account["sudo_policy"]
         normal_root = user.pw_name == "root" and user.pw_uid == 0
         if not normal_root and sudo["status"] == "ok" and "may run the following commands" in sudo.get("output", ""):
-            findings.append({"level": "REVIEW", "message": f"Account {user.pw_name} has sudo command grants. Review sudo_policy for command scope, run-as users and NOPASSWD rules."})
+            findings.append(_finding("REVIEW", f"Account {user.pw_name} has sudo command grants. Review sudo_policy for command scope, run-as users and NOPASSWD rules.", user.pw_name))
         if not normal_root and (user.pw_uid == 0 or set(membership) & {"sudo", "admin", "docker", "lxd", "disk"}):
-            findings.append({"level": "REVIEW", "message": f"Account {user.pw_name}: UID {user.pw_uid}, privileged groups {membership}. Review intended administrative access."})
+            findings.append(_finding("REVIEW", f"Account {user.pw_name}: UID {user.pw_uid}, privileged groups {membership}. Review intended administrative access.", user.pw_name))
         state = account["password_state"].get("output", "").split()
         if len(state) > 1 and state[1] == "NP":
-            findings.append({"level": "REVIEW", "message": f"Account {user.pw_name} has no password. Actual login depends on PAM and SSH policy."})
+            findings.append(_finding("REVIEW", f"Account {user.pw_name} has no password. Actual login depends on PAM and SSH policy.", user.pw_name))
         account["permissions"] = [permission_info(Path(user.pw_dir), user.pw_uid)]
         account_templates = templates
         path_scope = {"source": "selected sshd configuration", "applicability": "unknown"}
@@ -159,7 +168,7 @@ def collect(run, ssh_output="", *, ssh_check=None):
             inventory = key_inventory(path, run)
             account["key_files"].append(inventory)
             if inventory["status"] == "unknown":
-                findings.append({"level": "UNKNOWN", "message": f"{user.pw_name}: {path}: {inventory['detail']}"})
+                findings.append(_finding("UNKNOWN", f"{user.pw_name}: {path}: {inventory['detail']}", user.pw_name))
             if inventory["status"] != "absent":
                 account["permissions"].extend(permission_info(parent, user.pw_uid) for parent in (path.parent, path))
             for key in inventory["keys"]:
@@ -169,9 +178,9 @@ def collect(run, ssh_output="", *, ssh_check=None):
                     matches = [event for event in events if event["user"] == user.pw_name and event["fingerprint"] == fingerprint]
                     key["last_observed_use"] = matches[-1] if matches else None
                     if key["type"] == "ssh-dss" or (key["type"] == "ssh-rsa" and key["bits"] < 2048):
-                        findings.append({"level": "REVIEW", "message": f"{user.pw_name}: weak/obsolete key {fingerprint} ({key['type']}, {key['bits']} bits)."})
+                        findings.append(_finding("REVIEW", f"{user.pw_name}: weak/obsolete key {fingerprint} ({key['type']}, {key['bits']} bits).", user.pw_name))
                 else:
-                    findings.append({"level": "UNKNOWN", "message": f"{user.pw_name}: could not validate key at {path}:{key['line']}."})
+                    findings.append(_finding("UNKNOWN", f"{user.pw_name}: could not validate key at {path}:{key['line']}.", user.pw_name))
         reported_symlinks = []
         for permission in account["permissions"]:
             if permission.get("symlink"):
@@ -179,30 +188,30 @@ def collect(run, ssh_output="", *, ssh_check=None):
                 if permission in reported_symlinks:
                     continue
                 reported_symlinks.append(permission)
-                findings.append({"level": "UNKNOWN", "message": f"{user.pw_name}: {permission['path']}: {permission['unknown']}"})
+                findings.append(_finding("UNKNOWN", f"{user.pw_name}: {permission['path']}: {permission['unknown']}", user.pw_name))
                 if permission["unsafe"]:
-                    findings.append({"level": "REVIEW", "message": f"{user.pw_name}: unexpected owner UID {permission['owner_uid']} on symbolic link {permission['path']}."})
+                    findings.append(_finding("REVIEW", f"{user.pw_name}: unexpected owner UID {permission['owner_uid']} on symbolic link {permission['path']}.", user.pw_name))
             elif permission.get("unsafe"):
-                findings.append({"level": "REVIEW", "message": f"{user.pw_name}: unexpected owner or group/other write permission on {permission['path']} ({permission['mode']})."})
+                findings.append(_finding("REVIEW", f"{user.pw_name}: unexpected owner or group/other write permission on {permission['path']} ({permission['mode']}).", user.pw_name))
         accounts.append(account)
     for fingerprint, owners in fingerprints.items():
         if len(owners) > 1:
-            findings.append({"level": "REVIEW", "message": f"SSH key {fingerprint} observed in candidate key files for accounts: {', '.join(sorted(owners))}. Effective authorization across these accounts is unverified."})
+            findings.append(_finding("REVIEW", f"SSH key {fingerprint} observed in candidate key files for accounts: {', '.join(sorted(owners))}. Effective authorization across these accounts is unverified.", fingerprint=fingerprint))
     unverified = [account["user"] for account in accounts if account["key_path_scope"]["applicability"] == "unknown"]
     if unverified:
-        findings.append({"level": "UNKNOWN", "message": "SSH key-path applicability unverified for: " + ", ".join(unverified) + ". Candidate files are inventoried; inspect key_path_scope and the selected SSH evaluation before treating entries as effective authorization."})
+        findings.append(_finding("UNKNOWN", "SSH key-path applicability unverified for: " + ", ".join(unverified) + ". Candidate files are inventoried; inspect key_path_scope and the selected SSH evaluation before treating entries as effective authorization."))
     last_login = run(["lastlog"])
     incomplete = [account["user"] for account in accounts if account["password_state"]["status"] != "ok"]
     if incomplete:
-        findings.append({"level": "UNKNOWN", "message": "Password state unavailable for: " + ", ".join(incomplete)})
+        findings.append(_finding("UNKNOWN", "Password state unavailable for: " + ", ".join(incomplete)))
     incomplete_sudo = [account["user"] for account in accounts if account["sudo_policy"]["status"] != "ok" and "is not allowed to run sudo" not in (account["sudo_policy"].get("output", "") + account["sudo_policy"].get("detail", ""))]
     if incomplete_sudo:
-        findings.append({"level": "UNKNOWN", "message": "Sudo policy could not be established for: " + ", ".join(incomplete_sudo)})
+        findings.append(_finding("UNKNOWN", "Sudo policy could not be established for: " + ", ".join(incomplete_sudo)))
     incomplete_expiry = [account["user"] for account in accounts if account["password_and_account_expiry"]["status"] != "ok"]
     if incomplete_expiry:
-        findings.append({"level": "UNKNOWN", "message": "Account/password expiry unavailable for: " + ", ".join(incomplete_expiry)})
+        findings.append(_finding("UNKNOWN", "Account/password expiry unavailable for: " + ", ".join(incomplete_expiry)))
     if last_login["status"] != "ok":
-        findings.append({"level": "UNKNOWN", "message": "Account last-login history unavailable; inspect last_login evidence."})
+        findings.append(_finding("UNKNOWN", "Account last-login history unavailable; inspect last_login evidence."))
     return {"status": "ok", "accounts": accounts, "key_usage": usage, "ssh_scope": scope,
             "key_path_source": "selected sshd configuration/context" if "authorizedkeysfile" in settings else "conventional defaults; effective paths unknown",
             "last_login": last_login,

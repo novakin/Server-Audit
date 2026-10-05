@@ -76,26 +76,79 @@ def parse_crontab(text, system, owner):
         if not valid or not re.fullmatch(r'[A-Za-z0-9_.-]+\$?', user):
             issues.append({'line': number, 'reason': 'Unsupported schedule/user syntax; raw text withheld'})
             continue
+        references, complete = script_references(cron_command(pieces[-1]))
+        if not complete:
+            issues.append({'line': number, 'reason': 'Unsupported command references; raw text withheld'})
         jobs.append({'line': number, 'schedule': ' '.join(schedule), 'user': user,
-                     'patterns': suspicious_patterns(pieces[-1]), 'referenced_scripts': script_paths(pieces[-1])})
+                     'patterns': suspicious_patterns(pieces[-1]), 'referenced_scripts': references})
     return jobs, assignments, issues
+
+
+def cron_command(command):
+    """Cron's first unescaped percent starts stdin, even inside shell quotes."""
+    prefix, escaped = [], False
+    for character in command:
+        if escaped:
+            if character != '%':
+                prefix.append('\\')
+            prefix.append(character)
+            escaped = False
+        elif character == '\\':
+            escaped = True
+        elif character == '%':
+            break
+        else:
+            prefix.append(character)
+    if escaped:
+        prefix.append('\\')
+    return ''.join(prefix)
+
+
+def literal_script_paths(tokens):
+    """Extract only executable/immediate interpreter paths from literal argv."""
+    paths = []
+    complete = True
+    interpreters = {'sh', 'bash', 'dash', 'zsh', 'python', 'python3', 'perl', 'ruby', 'node'}
+    for index, token in enumerate(tokens[:2]):
+        if index == 1 and Path(tokens[0]).name not in interpreters:
+            continue
+        if any(character in token for character in '$`\n\r\x00'):
+            complete = False
+        elif token.startswith('/'):
+            paths.append(token)
+    return list(dict.fromkeys(paths)), complete
+
+
+def script_references(command):
+    """Inspect the first simple shell command, withholding unsupported tails."""
+    complete, quote, escaped = True, None, False
+    for index, character in enumerate(command):
+        if escaped:
+            escaped = False
+        elif character == '\\' and quote != "'":
+            escaped = True
+        elif quote:
+            if character == quote:
+                quote = None
+        elif character in "'\"":
+            quote = character
+        elif character in ';|&()<>\n\r':
+            command = command[:index]
+            complete = False
+            break
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return [], False
+    paths, literal = literal_script_paths(tokens)
+    if tokens and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', tokens[0]):
+        complete = False
+    return paths, complete and literal
 
 
 def script_paths(command):
     """Only literal absolute script paths; no expansion, resolution or execution."""
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return []
-    paths = []
-    interpreters = {'sh', 'bash', 'dash', 'zsh', 'python', 'python3', 'perl', 'ruby', 'node'}
-    for index, token in enumerate(tokens[:2]):
-        if not token.startswith('/') or any(character in token for character in '$`\n\r'):
-            continue
-        # Only the executable or an immediate interpreter script argument.
-        if index == 0 or (index == 1 and Path(tokens[0]).name in interpreters):
-            paths.append(token)
-    return list(dict.fromkeys(paths))[:4]
+    return script_references(command)[0]
 
 
 def timer_script_paths(value):
@@ -117,16 +170,25 @@ def timer_script_paths(value):
             continue
         # systemd's @ prefix can replace argv[0] with an arbitrary name.
         tokens[0] = executable
-        targets.extend(script_paths(shlex.join(tokens)))
+        paths, literal = literal_script_paths(tokens)
+        targets.extend(paths)
+        complete = complete and literal
     return list(dict.fromkeys(targets)), complete
 
 
-def permission_findings(metadata, expected_uid=0, check_mode=True):
+def finding(level, message, resource_type=None, resource_id=None):
+    item = {'level': level, 'message': message, 'check': 'scheduled_tasks'}
+    if resource_type and resource_id is not None:
+        item.update(resource_type=resource_type, resource_id=str(resource_id), resource_name=str(resource_id))
+    return item
+
+
+def permission_findings(metadata, expected_uid=0, check_mode=True, resource_type='cron_definition'):
     findings = []
     if check_mode and int(metadata['mode'], 8) & 0o022:
-        findings.append({'level': 'REVIEW', 'message': f"Scheduled definition {metadata['path']} ({metadata['mode']}) is group/world-writable."})
+        findings.append(finding('REVIEW', f"Scheduled definition {metadata['path']} ({metadata['mode']}) is group/world-writable.", resource_type, metadata['path']))
     if metadata['uid'] not in (0, expected_uid):
-        findings.append({'level': 'REVIEW', 'message': f"Scheduled definition {metadata['path']} has unexpected owner UID {metadata['uid']} for run-as UID {expected_uid} (root ownership also accepted)."})
+        findings.append(finding('REVIEW', f"Scheduled definition {metadata['path']} has unexpected owner UID {metadata['uid']} for run-as UID {expected_uid} (root ownership also accepted).", resource_type, metadata['path']))
     return findings
 
 
@@ -155,7 +217,7 @@ def collect(run):
             inspected = files_seen[key]
             if inspected and (key, expected_uid) not in ownership_seen:
                 ownership_seen.add((key, expected_uid))
-                findings.extend(permission_findings(inspected[1], expected_uid, check_mode=False))
+                findings.extend(permission_findings(inspected[1], expected_uid, check_mode=False, resource_type='script' if script else 'cron_definition'))
             return inspected
         if len(files_seen) >= MAX_FILES:
             issue(path, 'File inspection limit reached')
@@ -163,23 +225,23 @@ def collect(run):
         files_seen[key] = None
         try:
             content, metadata = read_definition(path, script)
-            findings.extend(permission_findings(metadata, expected_uid))
+            findings.extend(permission_findings(metadata, expected_uid, resource_type='script' if script else 'cron_definition'))
             ownership_seen.add((key, expected_uid))
             parent = path.parent
             if parent not in parents_seen:
                 parents_seen.add(parent)
                 info = parent.lstat()
                 if info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX:
-                    findings.append({'level': 'REVIEW', 'message': f'Scheduled definition directory {parent} is group/world-writable; entries may be replaceable.'})
+                    findings.append(finding('REVIEW', f'Scheduled definition directory {parent} is group/world-writable; entries may be replaceable.', 'directory', parent))
             files_seen[key] = content, metadata
             return files_seen[key]
         except (OSError, ValueError):
             issue(path, 'Definition unreadable, oversized, symlinked or not a regular file; content withheld')
             return None
 
-    def patterns_at(path, line, patterns):
+    def patterns_at(path, line, patterns, resource_type='cron_definition'):
         if patterns:
-            findings.append({'level': 'REVIEW', 'message': f"Scheduled task {path}" + (f':{line}' if line else '') + ': suspicious patterns [' + ', '.join(patterns) + ']. Review locally; this is not a malware verdict.'})
+            findings.append(finding('REVIEW', f"Scheduled task {path}" + (f':{line}' if line else '') + ': suspicious patterns [' + ', '.join(patterns) + ']. Review locally; this is not a malware verdict.', resource_type, path))
 
     def inspect_script(path, expected_uid=0):
         inspected = inspect(path, expected_uid, script=True)
@@ -188,7 +250,7 @@ def collect(run):
             content, metadata = inspected
             metadata['patterns'] = suspicious_patterns(content)
             result['referenced_files'].append(metadata)
-            patterns_at(path, None, metadata['patterns'])
+            patterns_at(path, None, metadata['patterns'], 'script')
 
     definitions = [(CRON_FILE, 'system', 'root')]
     for location, kind in CRON_DIRECTORIES:
@@ -208,8 +270,14 @@ def collect(run):
         except (OSError, ValueError):
             issue(directory, 'Cron directory could not be enumerated')
     for path, kind, owner in definitions:
-        if path == CRON_FILE and not path.exists():
-            continue
+        if path == CRON_FILE:
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                continue
+            except OSError:
+                issue(path, 'Primary crontab metadata unavailable')
+                continue
         expected_uid = 0
         if kind == 'user':
             try:
@@ -224,7 +292,7 @@ def collect(run):
         metadata.update(kind=kind, owner=owner)
         if kind == 'periodic':
             metadata['patterns'] = suspicious_patterns(content)
-            patterns_at(path, None, metadata['patterns'])
+            patterns_at(path, None, metadata['patterns'], 'script')
         else:
             metadata['jobs'], metadata['environment_assignment_count'], metadata['parse_issues'] = parse_crontab(content, kind == 'system', owner)
             if metadata['parse_issues']:
@@ -271,7 +339,7 @@ def collect(run):
                         values = dict(line.split('=', 1) for line in command.get('output', '').splitlines() if '=' in line)
                         timer['user'] = values.get('User') or 'root'
                         timer['patterns'] = suspicious_patterns(values.get('ExecStart', ''))
-                        patterns_at(unit, None, timer['patterns'])
+                        patterns_at(unit, None, timer['patterns'], 'timer')
                         try:
                             import pwd
                             run_uid = int(timer['user']) if timer['user'].isdigit() else pwd.getpwnam(timer['user']).pw_uid
@@ -290,5 +358,5 @@ def collect(run):
                                 inspect_script(re.sub(r'\\x([0-9a-fA-F]{2})', lambda match: chr(int(match[1], 16)), fragment))
             result['timers'].append(timer)
     if result['status'] == 'partial':
-        findings.append({'level': 'UNKNOWN', 'message': 'Scheduled-task coverage incomplete. Review issues and scope in scheduled task evidence.'})
+        findings.append(finding('UNKNOWN', 'Scheduled-task coverage incomplete. Review issues and scope in scheduled task evidence.'))
     return result, findings

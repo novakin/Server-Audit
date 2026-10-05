@@ -72,6 +72,8 @@ flowchart TD
 | Inject the command function | Unit tests can supply deterministic tool responses without root or live services. Filesystem tests use temporary paths and patched scope constants. |
 | Interpretation belongs to collectors | All output formats share the same findings. Renderers do not decide whether a host is secure. |
 | Local collection with explicit scope limits | No remote probing or automatic remediation. Missing evidence remains visible. |
+| Per-stream native capture limits | The ordinary runner owns concurrent POSIX pipe reads and writes, a 30-second deadline, 8 MiB stdout / 1 MiB stderr caps and private process-group cleanup. Overflow/timeout withholds both streams; failed shutdown aborts. The standard library has no bounded-output `subprocess.run` option, so the small lifecycle implementation belongs here, separate from the secret-bearing Git reader. Fixed generous caps avoid a new tuning surface; revisit them only with evidenced native inventory needs. |
+| Additive finding identity | Collectors attach known resource identity, the runner labels check failures, and external import annotates only new findings. Reporting groups these fields without reinterpreting messages or policy. Legacy and audit-wide findings use explicit general fallback; JSON order/messages/counts remain authoritative. |
 | Built-in Git detection with an approved storage reader | Python owns candidate rules; Git owns object decompression/delta handling. Bounded secret-bearing pipes stay separate from reportable native output. |
 
 ## Change boundaries
