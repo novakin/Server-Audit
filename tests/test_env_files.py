@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from server_audit.collectors import env_files
+from server_audit import reporting
 
 
 class SourceTests(unittest.TestCase):
@@ -62,9 +63,90 @@ class MetadataTests(unittest.TestCase):
         self.root.chmod(0o770)
         result, findings = env_files.collect([str(self.root)])
         messages = '\n'.join(item['message'] for item in findings)
-        for phrase in ('world-readable', 'world-writable', 'group-writable', 'executable', 'ancestor'):
+        for phrase in ('other read bit set', 'world-writable', 'group-writable', 'executable', 'ancestor'):
             self.assertIn(phrase, messages)
         self.assertEqual(result['status'], 'ok')
+
+    def test_read_bits_receive_conditional_advice_without_changing_metadata_or_reading_contents(self):
+        for mode in (0o600, 0o640, 0o644):
+            with self.subTest(mode=oct(mode)):
+                path = self.file(mode=mode)
+                expected = env_files.metadata(path)
+                with patch('builtins.open', side_effect=AssertionError('Content read')), \
+                     patch.object(Path, 'open', side_effect=AssertionError('Content read')):
+                    item, findings = env_files.inspect_file(path, {})
+                self.assertEqual({key: item[key] for key in expected}, expected)
+                self.assertEqual(item['status'], 'inspected')
+                messages = '\n'.join(finding['message'] for finding in findings)
+                self.assertEqual(len([finding for finding in findings if finding['level'] == 'REVIEW']), 0 if mode == 0o600 else 1)
+                if mode != 0o600:
+                    self.assertIn('group read bit set', messages)
+                    self.assertIn('If confidential values are stored here', messages)
+                    self.assertIn('preserving required service access', messages)
+                    self.assertIn('Contents were not inspected', messages)
+                self.assertEqual('other read bit set' in messages, mode == 0o644)
+                self.assertNotIn('world-readable', messages)
+                self.assertNotIn('Prefer 0600', messages)
+
+    def test_mixed_modes_preserve_integrity_and_parent_warnings_independent_of_confidentiality(self):
+        self.root.chmod(0o770)
+        for mode in (0o664, 0o666, 0o620, 0o700, 0o4700):
+            with self.subTest(mode=oct(mode)):
+                self.file(mode=mode)
+                with patch('builtins.open', side_effect=AssertionError('Content read')), \
+                     patch.object(Path, 'open', side_effect=AssertionError('Content read')):
+                    check, findings = env_files.collect([str(self.root)])
+                messages = '\n'.join(finding['message'] for finding in findings)
+                self.assertIn('ancestor', messages)
+                self.assertEqual(check['files'][0]['mode'], format(mode, '04o'))
+                self.assertEqual('If confidential values are stored here' in messages, bool(mode & 0o044))
+                if mode & 0o022:
+                    self.assertIn('group-writable', messages)
+                    self.assertIn('protect file integrity', messages)
+                    self.assertIn('trusted writers', messages)
+                if mode & 0o002:
+                    self.assertIn('world-writable', messages)
+                if mode & 0o111:
+                    self.assertIn('executable', messages)
+                if mode & 0o7000:
+                    self.assertIn('special permission bits', messages)
+                self.assertNotIn('Prefer 0600', messages)
+
+    def test_root_owned_service_and_template_references_are_not_assumed_non_sensitive(self):
+        for name in ('/etc/default/cron', '/etc/default/ssh', '/srv/app/.env.example'):
+            with self.subTest(path=name):
+                candidate = Path(name)
+                def metadata(path):
+                    return {'path': str(path), 'mode': '0644' if path == candidate else '0700',
+                            'uid': 0, 'gid': 0, 'owner': 'root', 'group': 'root', 'sticky': False,
+                            'type': 'file' if path == candidate else 'directory', 'extended_acl': 'absent'}
+                with patch.object(env_files, 'metadata', side_effect=metadata), \
+                     patch.object(Path, 'is_symlink', return_value=False), \
+                     patch('builtins.open', side_effect=AssertionError('Content read')), \
+                     patch.object(Path, 'open', side_effect=AssertionError('Content read')):
+                    check, findings = self.collect_references(f'{name} (ignore_errors=no)')
+                item = check['files'][0]
+                self.assertEqual((item['path'], item['owner'], item['mode']), (name, 'root', '0644'))
+                self.assertEqual(item['applications'], ['systemd:app.service'])
+                self.assertEqual(len(findings), 1)
+                self.assertIn('If confidential values are stored here', findings[0]['message'])
+
+    def test_conditional_advice_and_unchanged_inventory_survive_all_report_formats(self):
+        self.file('config<fixture>.env', 0o644)
+        check, findings = env_files.collect([str(self.root)])
+        summary = {level: sum(item['level'] == level for item in findings) for level in ('REVIEW', 'UNKNOWN')}
+        self.assertEqual(summary, {'REVIEW': 1, 'UNKNOWN': 0})
+        report = {'schema_version': 1, 'host': 'synthetic', 'timestamp_utc': '2026-01-01T12:00:00+00:00',
+                  'checks': {'environment_files': check}, 'findings': findings, 'summary': summary, 'limitations': []}
+        with tempfile.TemporaryDirectory() as directory:
+            folder = reporting.export_report(report, directory)
+            self.assertEqual(json.loads((folder / 'data/report.json').read_text()), report)
+            html = (folder / 'report.html').read_text()
+            self.assertIn('config&lt;fixture&gt;.env', html)
+            self.assertIn('If confidential values require restricted readership', html)
+            self.assertNotIn('0600 is a common default', html)
+        self.assertIn('If confidential values are stored here', reporting.render_text(report))
+        self.assertNotIn('secret-test-sentinel', json.dumps(report))
 
     def test_symlinks_and_fifos_not_followed(self):
         self.file('private')

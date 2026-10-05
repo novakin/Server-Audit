@@ -60,19 +60,24 @@ def inspect_file(path, parent_cache):
     mode = int(item["mode"], 8)
     reasons = []
     if mode & 0o004:
-        reasons.append("world-readable")
+        reasons.append("other read bit set")
     if mode & 0o002:
         reasons.append("world-writable")
     if mode & 0o020:
         reasons.append("group-writable")
     if mode & 0o040:
-        reasons.append("group-readable; verify group membership is intended")
+        reasons.append("group read bit set")
     if mode & 0o111:
         reasons.append("has executable permission bits")
     if mode & 0o7000:
         reasons.append("has special permission bits")
     if reasons:
-        findings.append({"level": "REVIEW", "message": f"Environment file {path} ({item['mode']}): {'; '.join(reasons)}. Prefer 0600, or 0640 with an explicitly trusted service group."})
+        message = f"Environment file {path} ({item['mode']}): {'; '.join(reasons)}."
+        if mode & 0o022:
+            message += " Restrict write access to trusted writers to protect file integrity."
+        if mode & 0o044:
+            message += " Contents were not inspected. If confidential values are stored here, restrict read access to intended readers while preserving required service access."
+        findings.append({"level": "REVIEW", "message": message})
     if item["extended_acl"] == "present":
         findings.append({"level": "REVIEW", "message": f"Environment file {path} has an extended ACL. Inspect effective entries with getfacl; mode bits alone do not identify authorized users."})
     elif item["extended_acl"] == "unknown":

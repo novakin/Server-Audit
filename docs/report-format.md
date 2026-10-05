@@ -60,6 +60,10 @@ In `checks.environment_files.applications.sources[].files`, every native `Enviro
 
 Literal optional absence keeps its existing non-failure behavior. Mandatory literal errors remain incomplete. Unmatched brackets and empty/negation-only bracket sequences remain literal and retain inspection/application attribution. Nonempty bracket classes, including leading-`]` classes, are unevaluated; a bracket class cannot span path components. Glob-escaped references are likewise explicitly unknown, with an escape-specific detail, rather than interpreted as literal absence. Independently discovered metadata stays in `files`, without claiming the expression was evaluated or assigning its application by guessed matching. Docker bind paths remain literal, including filenames containing glob characters. No contents are read and no scope, link policy or traversal budgets are expanded. Fields are additive within schema version 1; existing JSON/HTML evidence and text skipped-path output retain the explanation. Older reports are not reinterpreted.
 
+## Environment-file permission advice
+
+File modes, ownership, application references, ACL and parent metadata remain unchanged. Read-bit findings describe observed group/other bits and make confidentiality advice conditional; they do not establish file contents or effective access. Mixed read/write modes retain independent integrity advice, and executable/special bits, ACL concerns and incomplete inspection remain visible. Finding wording intentionally changes, while levels and the one mode-review finding per file remain unchanged. Schema version stays 1; JSON, HTML and text preserve the same evidence. Older reports retain their original findings and counts rather than being reinterpreted.
+
 ## Built-in Git secret evidence
 
 `checks.git_secrets` retains the `status`, `repositories` and `limitations` containers. The additive `detector: "builtin"`, `ruleset_version: 2`, `rule_ids` and `limits` identify the implementation and selected bounds even when the check is not requested. A requested scan without the approved local Git reader is `unavailable`, not a clean or skipped scan.
