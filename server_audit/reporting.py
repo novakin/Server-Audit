@@ -186,8 +186,12 @@ def export_report(report, destination):
 
 def account_text_report(check):
     lines = []
+    if "ssh_scope" in check:
+        lines.append("SSH key-path evaluation: " + json.dumps(check["ssh_scope"]))
     for account in check["accounts"]:
         lines.append(f"{account['user']} uid={account['uid']} gid={account['gid']} shell={account['shell']} groups={','.join(account['groups'])}")
+        if "key_path_scope" in account:
+            lines.append("  Key-path scope: " + json.dumps(account["key_path_scope"]))
         for name in ("password_state", "password_and_account_expiry", "sudo_policy"):
             evidence = account[name]
             lines.append(f"  {name}: {evidence['status']}")
