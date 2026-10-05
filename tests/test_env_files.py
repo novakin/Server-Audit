@@ -135,6 +135,28 @@ class MetadataTests(unittest.TestCase):
                                         and str(path) in item['message'] for item in findings))
                     self.assertNotIn('Optional application file absent', json.dumps(report))
 
+    def test_repeated_environment_files_properties_preserve_all_reference_evidence(self):
+        literal = self.file('literal.conf')
+        values = [f'{self.root}/*.env (ignore_errors=yes)',
+                  f'{self.root}/missing-?.env (ignore_errors=no)',
+                  f'{literal} (ignore_errors=no)',
+                  f'{self.root}/absent-literal (ignore_errors=yes)']
+        with patch('builtins.open', side_effect=AssertionError('Content read')), \
+             patch.object(Path, 'open', side_effect=AssertionError('Content read')):
+            report, findings = self.collect_references('\nEnvironmentFiles='.join(values))
+        source = report['applications']['sources'][0]
+        self.assertEqual(len(source['files']), 4)
+        self.assertEqual(source['status'], 'partial')
+        self.assertEqual(report['status'], 'partial')
+        self.assertEqual([item['optional'] for item in source['files']], [True, False, False, True])
+        self.assertEqual([item['status'] for item in source['files'][:2]], ['unknown', 'unknown'])
+        self.assertEqual(report['files'][0]['path'], str(literal))
+        self.assertEqual(report['files'][0]['applications'], ['systemd:app.service'])
+        absent = next(item for item in report['skipped'] if item['path'].endswith('/absent-literal'))
+        self.assertEqual(absent['reason'], 'Optional application file absent')
+        self.assertEqual(len([item for item in findings if item['level'] == 'UNKNOWN'
+                              and item['message'].startswith('EnvironmentFile reference')]), 2)
+
     def test_literal_bracket_sequences_retain_metadata_and_application_attribution(self):
         for name in ('settings[.conf', 'settings].conf', 'settings[].conf', 'settings[!].conf', 'settings[^].conf'):
             path = self.file(name)

@@ -132,10 +132,12 @@ def application_sources(run, checks):
         evidence = run(["systemctl", "show", "--no-pager", "--property=EnvironmentFiles", "--property=MainPID", "--", unit])
         source = {"kind": "systemd", "name": unit, "status": evidence["status"], "files": []}
         if evidence["status"] == "ok":
-            properties = dict(line.split('=', 1) for line in evidence.get("output", "").splitlines() if '=' in line)
-            source["main_pid"] = properties.get("MainPID", "unknown")
+            properties = [line.split('=', 1) for line in evidence.get("output", "").splitlines() if '=' in line]
+            source["main_pid"] = dict(properties).get("MainPID", "unknown")
+            # Native systemctl repeats EnvironmentFiles= for each configured reference.
+            environment_files = ' '.join(value for name, value in properties if name == "EnvironmentFiles" and value)
             try:
-                source["files"] = parse_environment_files(properties.get("EnvironmentFiles", ""))
+                source["files"] = parse_environment_files(environment_files)
                 for entry in source["files"]:
                     detail = None
                     if '\\' in entry["path"]:
