@@ -33,6 +33,22 @@ class LiveIntegrationTests(unittest.TestCase):
         self.assertEqual(baseline['selected_settings']['allowtcpforwarding'], 'no')
         self.assertEqual(matched['selected_settings']['allowtcpforwarding'], 'yes')
         self.assertEqual(matched['selected_settings']['passwordauthentication'], 'no')
+        # Evaluate synthetic overrides only; do not change the running lab daemon or probe forwarding.
+        for override in ('yes', 'no', None):
+            with self.subTest(disable_forwarding=override):
+                command = ['sshd', '-T', '-f', '/opt/lab/sshd_config',
+                           '-o', 'AllowTcpForwarding=yes', '-o', 'X11Forwarding=yes']
+                if override is not None:
+                    command += ['-o', 'DisableForwarding=' + override]
+                evidence = run(command)
+                self.assertEqual(evidence['status'], 'ok', evidence.get('detail'))
+                selected, forwarding_findings = ssh_audit.ssh_findings(evidence['output'])
+                self.assertEqual(selected['disableforwarding'], override or 'no')
+                self.assertEqual(selected['allowtcpforwarding'], 'yes')
+                self.assertEqual(selected['x11forwarding'], 'yes')
+                advice = [item for item in forwarding_findings
+                          if item['message'].startswith(('SSH x11forwarding=', 'SSH allowtcpforwarding='))]
+                self.assertEqual(len(advice), 0 if override == 'yes' else 2)
         self.assertEqual(Path('/results/ssh-client.txt').read_text(), 'audit-live-ssh-ok')
         self.assertIn('Accepted publickey for root', Path('/results/sshd.log').read_text())
         inventory = accounts.key_inventory(Path('/run/server-security-audit-authorized_keys'), run)
