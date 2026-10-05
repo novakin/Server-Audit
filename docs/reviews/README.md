@@ -2,6 +2,8 @@
 
 These records describe their stated revisions, not today's backlog. [GitHub Issues](https://github.com/novakin/Server-Audit/issues) own current actionable work; [development](../development.md#work-tracking-and-agent-handoff) explains approval, evidence and handoff. Routine self-reviews and CI results belong in the PR description, not a new file for every PR.
 
+For the older improvement plan's delivery reconciliation and remaining validation direction, read the [roadmap](../roadmap.md#september-improvement-sequence-delivery-reconciliation). Original assessment sequences and test dates below remain historical; they are not unfinished-task lists.
+
 | Record | Purpose |
 | --- | --- |
 | [2026-10-05 codebase quality plan and reassessment](2026-10-05-codebase-quality-review.md) | Whole-code improvement scope, Ultra review corrections, validation basis and bounded reassessment |

@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) · [Development guide](development.md)
 
-Last substantive update: 2026-10-05 (Europe/Berlin), scoped to the EnvironmentFile wildcard fixture and five-test contract; not a new live run.
+Last substantive update: 2026-10-05 (Europe/Berlin), reconciling the five-test contract with recorded merged-revision evidence and the remaining V2 scope; this documentation edit did not execute a new live run.
 
 This page owns current lab preparation, execution and limits. The [original Debian validation](reviews/2026-09-17-debian-live-validation.md) and [Ubuntu CI/hardening review](reviews/2026-09-18-ubuntu-ci-hardening.md) are dated historical evidence. Current action status belongs in linked Issues. CI triggers, security and required-check setup belong in [Continuous integration](development.md#continuous-integration).
 
@@ -30,6 +30,8 @@ The acknowledgement and marker prevent accidental use; they do not establish iso
 
 The job log records native versions and the tested revision; its summary records completion or failure. This is Ubuntu evidence for that revision/toolchain, not a new Debian or full production-host validation. The [historical Debian results](reviews/2026-09-17-debian-live-validation.md) remain unchanged. CI trigger/security details and required-check configuration have one owner: [Continuous integration](development.md#continuous-integration).
 
+Recorded five-case evidence: [main run 37350754830](https://github.com/novakin/Server-Audit/actions/runs/37350754830) executed all five live tests with zero skips and successful setup/cleanup on `802b8e1bd48238b2182cbb994834ed327ec8119d`, using Ubuntu 24.04 / Python 3.13.15. [PR #40](https://github.com/novakin/Server-Audit/pull/40) owns its acceptance record; native EnvironmentFile, SSH per-user key-path and forwarding-override cases are included in that suite. This establishes the recorded cases on that revision, not the missing timer/journal behavior below.
+
 ## Repeatable live-test fixture contract
 
 The same fixture contract targets **Ubuntu and Debian**. The tests do not check a distribution name; they require the native tools and prepared fixtures listed below. The [historical run](reviews/2026-09-17-debian-live-validation.md) establishes its Debian results only. The [Ubuntu acceptance review](reviews/2026-09-18-ubuntu-ci-hardening.md) describes the later four-test hosted run; neither record proves all releases or untested integrations.
@@ -56,7 +58,7 @@ The fixture must provide:
 
 ## Remaining limits
 
-The suite now includes native systemd EnvironmentFile wildcard/property coverage in addition to SSH, Docker, firewall and sockets. The five-test suite must pass on the changed revision before that new native coverage is claimed as verified; the earlier four-test hosted result does not validate it. Journal-based key-use correlation, timer metadata, actual environment loading and standalone Debian boot/service behavior remain outside these tests. This is not a full production-host audit or a fresh Debian validation. The historical Debian chroot's systemd limitation remains in its [original record](reviews/2026-09-17-debian-live-validation.md#remaining-limits).
+The suite includes verified native systemd EnvironmentFile wildcard/property coverage in addition to SSH, Docker, firewall and sockets, as scoped to the recorded revision above. The earlier four-test hosted result alone does not validate the fifth case. Journal-based key-use correlation and timer metadata remain the bounded V2 follow-up in [#41](https://github.com/novakin/Server-Audit/issues/41); the current SSH fixture's file log and injected account-journal response do not establish native journal correlation. Actual application environment loading and standalone Debian boot/service behavior also remain outside these tests, but are not automatically prerequisites for that bounded V2 task. This is not a full production-host audit or a fresh Debian validation. The historical Debian chroot's systemd limitation remains in its [original record](reviews/2026-09-17-debian-live-validation.md#remaining-limits).
 
 Firewall tests establish collection of known evidence, not correctness of production filtering. Loopback HTTP success does not establish public exposure. Rootless Docker, other versions/storage drivers, provider firewalls, NAT and remote IPv4/IPv6 reachability remain outside that validation.
 
