@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) · Internal engineering documentation
 
-Last substantive update: 2026-09-18 (Europe/Berlin).
+Last substantive update: 2026-10-06 (Europe/Berlin).
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
