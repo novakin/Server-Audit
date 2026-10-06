@@ -8,9 +8,41 @@ Run an audit on an authorized Ubuntu/Debian host, retain its evidence privately,
 
 The runtime uses Python 3 and its standard library. There is no pip requirements file or automatic dependency installer. Ubuntu WSL and Debian 13 userland in an isolated WSL2 lab have been exercised; standalone Debian systemd-host validation remains outstanding. See [live validation](live-validation.md) for tested versions and limits. A minimum host-audit Python version has not been established by a compatibility test matrix. The separate [external companion](external-verification.md#cli-and-automation) requires Python 3.9 or newer. Record `python3 --version` for the environment being assessed.
 
-Copy every runtime file in the [architecture table](architecture.md#architecture-and-extending-audits), including `report_template.html`, into one trusted directory on the server. Do not copy `.artifacts`, collected reports, cached bytecode or local scanner test binaries. Keep source and template from the same reviewed revision or source snapshot. The script directory and native tool directories must not be writable by untrusted users when running as root.
+Copy the following from one reviewed revision into a **new, clean, trusted directory**:
 
-Run from that directory. Root improves coverage; unprivileged runs are allowed but record incomplete visibility. The CLI checks for Linux, not for a specific distribution. Do not interpret a successful launch on another Linux distribution as supported behavior.
+```text
+audit.py
+external_probe.py
+server_audit/
+    __init__.py
+    cli.py
+    audit_runner.py
+    command_runner.py
+    reporting.py
+    external_probe.py
+    external_verification.py
+    collectors/
+        __init__.py
+        accounts.py
+        ssh_audit.py
+        network_audit.py
+        system_audit.py
+        docker_audit.py
+        env_files.py
+        scheduled_tasks.py
+        git_secrets.py
+        git_reader.py
+    templates/
+        report_template.html
+```
+
+The [architecture table](architecture.md#architecture-and-extending-audits) lists module ownership. Exclude `tests/`, test fixtures, `.git`, `.artifacts`, collected reports, local lab files and cached bytecode (`__pycache__`, `*.pyc`). Documentation may be retained separately for operators but is not needed at runtime. Do not flatten the package or copy only its Python files without the template. No `pip install`, `PYTHONPATH` or `sys.path` changes are required.
+
+For an upgrade from the old flat layout, use a clean directory rather than overlaying the old root modules. Keep the previous complete revision for rollback; do not mix revisions. Only the root launchers are supported script entry points. Internal imports now use `server_audit.*`; old root-module imports are not preserved.
+
+Run from that directory or give the launcher an absolute path, for example `python3 /opt/server-audit/audit.py --help`. Templates are resolved relative to the package, while user-supplied relative repository/configuration/export paths still resolve from the caller's current directory. The program does not change directories to fix imports. For scheduled invocations, use explicit absolute input and export paths.
+
+Root improves coverage; unprivileged runs are allowed but record incomplete visibility. The CLI checks for Linux, not for a specific distribution. Do not interpret a successful launch on another Linux distribution as supported behavior. The runtime directory, package files and native tool directories must not be writable by untrusted users when running as root.
 
 | Area | Native tools used |
 | --- | --- |
@@ -22,9 +54,13 @@ Run from that directory. Root improves coverage; unprivileged runs are allowed b
 | Account access/history | `passwd`, `chage`, `sudo`, `lastlog` |
 | Extended ACL metadata | Python `os.getxattr`; `getfacl` is suggested only for manual follow-up |
 | Optional Docker inventory | `docker`, local default Unix socket |
-| Requested repository secret scans | `gitleaks` and `git`; see [scanner scope](audit-reference.md#git-secrets) |
+| Requested repository secret scans | `git` strictly as a local storage reader; Python owns [built-in detection](audit-reference.md#git-secrets) |
 
-Install missing tools only through your normal host administration process when coverage requires them. The audit neither installs tools nor starts services. Executables resolve from `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`; a tool available only in your interactive shell may be unavailable to the audit.
+New external-tool integrations require explicit user approval before implementation; see [agent approval rules](../AGENTS.md#external-tool-approval). The existing native tools in this table remain in scope. Install missing approved tools only through your normal host administration process when coverage requires them. Gitleaks is no longer required. The audit neither installs tools nor starts services. Executables resolve from `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`; a tool available only in your interactive shell may be unavailable to the audit.
+
+Ordinary native output is capped during capture at 8 MiB stdout and 1 MiB stderr per command, with a 30-second execution/capture deadline. These generous fixed limits bound host inventory output without adding a tuning interface. An unusually large legitimate result can exceed them: the report then records an error and withholds both streams rather than presenting partial evidence as a successful inventory. Normal nonzero results retain bounded diagnostics. Cancellation stops/reaps the owned command group and aborts report generation; unconfirmed shutdown is fatal. Cleanup has its own bounded allowance, and the audit has no whole-run deadline. See [capture and parser semantics](report-format.md#native-command-capture-and-parser-coverage); Git inspection uses its separate limits.
+
+The sequential host CLI defers its normal Python Ctrl+C handler during process construction until the child has an owned cleanup guard, then restores/replays cancellation. Existing ignored/custom handlers and non-main-thread callers retain their signal policy; this is not a guarantee against forced termination or arbitrary exceptions inside native process creation.
 
 ## First run
 
@@ -34,9 +70,9 @@ python3 audit.py --help
 sudo python3 audit.py --export /var/lib/server-security-audit
 ```
 
-Choose a trusted export parent and run on the target host. Normal inspection may create system log records. Export writes a local report folder; requested Git scans also create temporary scanner files. The audit does not modify service configuration, permissions, package metadata or schedules.
+Choose a trusted export parent and run on the target host. Normal inspection may create system log records. Export writes a local report folder; requested Git scans also create private, generated Git-reader metadata (no copied object contents). The audit does not modify service configuration, permissions, package metadata or schedules.
 
-Review the export path written to stderr. Confirm `manifest.json` has `status: complete`, then open `report.html` locally or transfer the complete folder through your approved secure channel. A completed bundle can contain incomplete checks. Expected OS metadata read failures and Git scanner scratch setup/access failures are recorded without discarding other collected evidence. A missing `/etc/os-release` retains the existing platform-identity fallback; an unreadable file is an error, not that fallback.
+Review the export path written to stderr. Confirm `manifest.json` has `status: complete`, then open `report.html` locally or transfer the complete folder through your approved secure channel. A completed bundle can contain incomplete checks. Expected OS metadata read failures and expected local Git reader setup/access failures are recorded without discarding other collected evidence. A missing `/etc/os-release` retains the existing platform-identity fallback; an unreadable file is an error, not that fallback.
 
 ## CLI reference
 
@@ -49,13 +85,14 @@ Review the export path written to stderr. Confirm `manifest.json` has `status: c
 | `--ssh-context CONTEXT` | Connection attributes for SSH Match evaluation |
 | `--ssh-config PATH` | On-disk SSH configuration to evaluate |
 | `--env-root DIRECTORY` | Repeatable; replaces default directory discovery roots, not application-reference inspection |
-| `--git-root REPOSITORY` | Repeatable; explicitly enables content scanning of selected repositories |
+| `--git-root REPOSITORY` | Repeatable; explicitly inspects local Git config and stored objects, not working files |
+| `--git-scan-seconds SECONDS` | Per-repository scan budget, default 60; greater than zero through 3600; does not enable scanning by itself |
 | `-h`, `--help` | Show arguments without collecting host evidence |
 
 ```bash
 sudo python3 audit.py --env-root /srv/apps --env-root /opt/services --export /var/lib/server-security-audit
 sudo python3 audit.py --ssh-context 'user=alice,addr=198.51.100.10,host=client.example' --export
-sudo python3 audit.py --git-root /srv/app --export
+sudo python3 audit.py --git-root /srv/app --git-scan-seconds 60 --export
 ```
 
 Prefer export bundles for stored audits. If redirecting stdout, set a restrictive umask in the shell that creates the file; sudo does not make shell redirection private:
@@ -66,13 +103,19 @@ Prefer export bundles for stored audits. If redirecting stdout, set a restrictiv
 
 ## Scanner failures and interruption
 
-Git scratch creation or control-file writes that fail leave the requested repository `error` (no scan completed) or `partial` (some scan evidence retained); the overall Git check is `partial` with an Unknown finding. Raw scratch error strings are withheld. Later selected repositories and other collectors can still run. A cleanup failure on an otherwise completed run preserves evidence and records `cleanup_status: error` and `scratch_path` for restricted local follow-up; it must not be interpreted as clean completion.
+The current scanner is built-in Python detection; the child processes are Git storage readers. Select a repository root, its actual `.git` directory or a bare repository. No working-file scan, clone, fetch, credential validation or automatic repository discovery occurs. Git-file/shared-worktree indirection, alternate object stores and symlink/special-file storage are not followed. See [exact scope, rules and bounds](audit-reference.md#git-secrets).
 
-Ctrl+C while waiting for the scanner attempts to stop its private POSIX process group and reap the scanner before scratch cleanup, using the same helper as timeout handling. Interruption remains a `KeyboardInterrupt`, even if signalling or reaping fails; the host CLI does not continue collection or export a completed audit. An ordinary timeout remains a failed scan only after shutdown succeeds.
+A missing or unreadable primary Git `config` now stops that repository's object inspection with incomplete/Unknown evidence; the auditor no longer guesses SHA-1 from a missing file. Retained configuration findings and later repositories are still reported. Inspect the selected repository and its metadata through a separate maintenance process; do not create a guessed configuration merely to obtain a green result. Ordinary readable SHA-1 configuration does not require an explicit object-format setting. Valid valueless `worktreeConfig` and explicitly empty boolean values are handled through Git's own parser; invalid storage metadata still requires follow-up.
 
-If shutdown cannot be confirmed, the audit aborts and leaves its private `0700` scratch directory in place. The diagnostic identifies the scanner PID and retained path without including raw scanner logs or OS error text. This also applies to a second Ctrl+C during shutdown. Verify and stop the scanner and its remaining process-group members before removing the retained directory; a PID alone must not be treated as proof of process identity. Do not interpret retained files as a completed scan or audit. Normal successful shutdown still removes scratch; no automatic finalizer deletes scratch after an unconfirmed shutdown.
+The report identifies these detection semantics with `ruleset_version: 2`. Narrower reference exclusions may reveal previously suppressed literal passwords or hardcoded fallbacks; they are candidates requiring local review, not automatically validated credentials. See [the exact exclusion scope](audit-reference.md#ruleset-2-reference-exclusions) before comparing reports.
 
-This is not checkpoint/resume support or a guarantee against uncatchable termination (for example SIGKILL or power loss). Scratch cleanup errors after a successful stop do not mask interruption; inspect private temporary storage locally when necessary.
+Expected read, format, workspace and budget failures preserve existing detections, produce partial/Unknown evidence, and allow later repositories and other collectors to run. Repository `issues` explain failures without raw Git stderr or OS error text. Missing/mismatched pack-index pairs and any Git diagnostic output produce incomplete coverage, including exit-zero diagnostics. Readable configuration/object findings and later repositories remain available; a zero-object result does not override a storage warning. Inspect damaged storage locally through a separate maintenance process; the audit never repairs indexes. No source content is written into temporary reports. If generated reader-metadata cleanup fails after otherwise completed work, a safe issue includes the workspace path for local follow-up.
+
+Ctrl+C stops the readers' private POSIX process groups and reaps the processes before removing the generated reader workspace. The same shutdown helper handles exhausted budgets and read failures. Reaping has a five-second grace per reader; a scan budget is not an exact total wall-time promise. An interruption remains a `KeyboardInterrupt`, including failed signalling/reaping or a second interruption during shutdown. Collection does not proceed to final summary/export after cancellation.
+
+If shutdown cannot be confirmed, the entire audit aborts and retains its private `0700` reader workspace. The diagnostic gives the affected PID(s) and workspace path without raw payload or OS error strings. Confirm process identity, stop any remaining reader/group members, then remove the retained workspace locally. Do not delete it blindly using an old PID. Normal shutdown cleans the workspace; no automatic finalizer removes it after unconfirmed shutdown. Files inside contain only generated metadata, not source secrets.
+
+This is not checkpoint/resume support or protection against uncatchable termination such as SIGKILL/power loss. Cleanup errors must not mask an active interruption. Run against controlled, preferably quiescent repositories: access/link preflight is not a snapshot or a guarantee against concurrent path replacement. A completed export can contain incomplete Git coverage; a blank result is not a security certificate.
 
 ## Review workflow
 
@@ -110,7 +153,9 @@ audits/
 
 `data/report.json` contains the full collected report, including failed checks, findings and limitations. Top-level `schema_version: 1` identifies the report format. The HTML is rendered from that same data without changing it. The manifest records export time, audit time, hostname, export schema version and artifact paths. It is published only after the artifacts have been written successfully; it is not a cryptographic integrity signature. A folder without a valid `manifest.json` with `status: complete` is incomplete. Export failures return exit code 1 and retain partial files for inspection. No automatic retention or cleanup runs.
 
-Open `report.html` directly in a browser. Styles and scripts are embedded; there are no CDN dependencies, analytics or network fetches. The report includes review/unknown finding filters, search, collection coverage, socket/account/container inventories and expandable evidence. Native details remain usable without JavaScript. Light/dark themes follow browser preferences. Print/save-PDF expands all evidence and includes findings hidden by filters, then restores the screen state. The JSON download link requires keeping the sibling `data` directory; the HTML itself can be viewed alone.
+Open `report.html` directly in a browser. Styles and scripts are embedded; there are no CDN dependencies, analytics or network fetches. The report includes review/unknown finding filters, search, collection coverage, socket/account/container inventories and expandable evidence. With JavaScript enabled, coverage links and direct evidence fragments open the corresponding evidence panel. Native details remain usable without JavaScript; expand panels manually in that mode. Light/dark themes follow browser preferences. Print/save-PDF expands all evidence and includes findings hidden by filters, then restores the screen state. The JSON download link requires keeping the sibling `data` directory; the HTML itself can be viewed alone.
+
+Text, including Scope & limitations, uses its containing section or cover column within the bounded report. Narrow layouts and enlarged text reflow instead of clipping; wide tables retain their own keyboard-focusable horizontal scrolling. The title stays on one line where it fits and wraps when necessary.
 
 On Linux, audit folders and data directories are created with mode `0700`; files use `0600`, owned by the invoking user (normally root under sudo). Existing parent-directory permissions are not changed. On Windows or Windows-mounted filesystems, host ACL/mount behavior governs access; POSIX modes are not a substitute for checking those permissions. Export only to trusted directories. Transfer a complete folder through your normal secure file-transfer process, and grant access only to intended internal reviewers. Both JSON and HTML contain sensitive operational evidence; HTML escaping prevents captured host strings from becoming executable markup, but does not redact that evidence.
 
@@ -132,7 +177,7 @@ There is no retention policy built into the script, and no automatic deletion. T
 | SSH unavailable | Check `sshd` installation, privileges and selected configuration. Validate Match context against intended connections. |
 | Key usage Unknown | No usable match in retained evidence. Check journal access/retention; this does not mean the key was never used. |
 | Environment or scheduled-task coverage partial | Read `issues`, skipped paths and limits. Symlinks, bounds and unsupported syntax require local follow-up. |
-| Requested Git scan unavailable | Check Gitleaks visibility in audit PATH and selected repository scope. Never interpret scanner failure as no secrets. |
+| Requested Git scan unavailable | Check Git visibility in audit PATH and selected storage scope. Review repository issues and limits; unavailable/incomplete is not no secrets. |
 | No completion manifest | Export was interrupted or failed. Keep the partial folder for diagnosis; rerun into a new bundle after fixing storage/access. |
 | Long execution time | Collection is sequential; command deadlines apply individually. Large account/container inventories may take longer. There is no total-runtime guarantee. |
 

@@ -18,7 +18,7 @@ On the audited Ubuntu/Debian server:
 sudo python3 audit.py --export /var/lib/server-security-audit
 ```
 
-Keep the original bundle. Transfer its `data/report.json` to the independent probe machine through your normal secure transfer process. It contains sensitive host evidence. Copy the project runtime files there as well, including both `external_*.py` modules, `reporting.py` and `report_template.html`. The companion uses Python's standard library and supports portable Python socket APIs; it does not require root or Nmap. It does not run the Linux host audit on the probe machine.
+Keep the original bundle. Transfer its `data/report.json` to the independent probe machine through your normal secure transfer process. It contains sensitive host evidence. Copy both root launchers (`audit.py` and `external_probe.py`) and the complete `server_audit/` package there as well, preserving `collectors/` and `templates/` and excluding caches. Use a clean directory; do not mix old flat modules with this layout. See the [runtime copy instructions](operations.md#prerequisites-and-installation). The companion launcher delegates to `server_audit/external_probe.py`; importing the package does not run the host collectors. The companion uses Python's standard library and supports portable Python socket APIs; it does not require root or Nmap. It does not run the Linux host audit on the probe machine.
 
 ## 2. Review the selected scope
 
@@ -88,10 +88,14 @@ The report shows same-port listeners and Docker bindings as **unverified candida
 
 ## CLI and automation
 
+Run the root `external_probe.py` launcher, not the implementation module by file path. The launcher works from another directory without import-path setup; relative `--audit`, `--results`, `--output` and `--export` paths remain relative to the caller. The same copy-and-run layout is used on the probe and review machines.
+
 `external_probe.py probe --help` and `external_probe.py import --help` list the options. Successful probing/import returns `0`; this is completion, not a security pass. Validation/I/O failures return `1`; argument errors return `2`. Ctrl+C returns `130`, cancels queued endpoints and waits for active sockets to finish within their individual timeout; any incomplete output must not be imported. Probe status does not change the exit code. Import requires complete declared result coverage; a local/network error is a complete but Unknown observation, not a missing row. The companion requires Python 3.9 or newer for queued-future cancellation; it is verified on Python 3.12/3.13.
 
 The original host-only limitation that no external scan was performed still describes host collection. Imported observations are separate evidence from a different source/time, displayed in the External verification section. Keep both when handing a report to another reviewer.
 
 ## Verification
 
-`test_external_verification.py` covers real loopback TCP connections, mocked public IPv4/IPv6 observations, timeout/refusal distinctions, conservative labels, candidate extraction, redaction/projection, malformed/mismatched inputs, exclusive private output, no-network dry run/import and completed enriched exports. Public addresses in fixtures are mocked; the suite makes no external scans. Native IPv6 loopback passed on Ubuntu. The Windows test host denied its native IPv6 control connection with WSAEACCES; that test is skipped when platform/network policy blocks it, and actual probe failures remain Unknown. Existing runtime tests remain separate. HTML was reviewed at desktop/mobile sizes in light/dark themes; exposure states remain distinct and wide tables scroll within the report.
+The layout change adds `tests/test_layout.py` runtime-copy checks for the companion help, no-network dry run and offline import. Historical native/browser results below describe their original runs, not new validation of this layout.
+
+`tests/test_external_verification.py` covers real loopback TCP connections, mocked public IPv4/IPv6 observations, timeout/refusal distinctions, conservative labels, candidate extraction, redaction/projection, malformed/mismatched inputs, exclusive private output, no-network dry run/import and completed enriched exports. Public addresses in fixtures are mocked; the suite makes no external scans. Native IPv6 loopback passed on Ubuntu. The Windows test host denied its native IPv6 control connection with WSAEACCES; that test is skipped when platform/network policy blocks it, and actual probe failures remain Unknown. Existing runtime tests remain separate. HTML was reviewed at desktop/mobile sizes in light/dark themes; exposure states remain distinct and wide tables scroll within the report.

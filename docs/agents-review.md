@@ -2,6 +2,8 @@
 
 [Documentation index](../README.md) · [Active project instructions](../AGENTS.md)
 
+This is a historical review of the original instructions, before the built-in Git replacement and package layout. Gitleaks references describe that revision, not current requirements. Code links point to current locations; [AGENTS.md](../AGENTS.md) owns the active layout and external-tool approval policy.
+
 ## Scope and outcome
 
 Independent subagent review at xhigh reasoning effort examined the source, current documentation and proposed project instructions. The parent incorporated the refinements below. No architecture blocker was identified in this scope; this was not a full security assessment or a new runtime validation pass.
@@ -18,7 +20,7 @@ Keep the explicit runner, focused collectors, standard-library runtime and separ
 
 ## Remaining follow-up
 
-In [audit_runner.py](../audit_runner.py), the general SSH limitation says “installed default configuration” even when the caller selects `--ssh-config`. The CLI/guide correctly describe the selected configuration. A focused future change should make this report wording conditional or configuration-neutral and verify both default/custom cases. Runtime code was not changed for this documentation/proposal task.
+In [audit_runner.py](../server_audit/audit_runner.py), the general SSH limitation says “installed default configuration” even when the caller selects `--ssh-config`. The CLI/guide correctly describe the selected configuration. A focused future change should make this report wording conditional or configuration-neutral and verify both default/custom cases. Runtime code was not changed for this documentation/proposal task.
 
 Follow-up: the reliability/SSH evidence change on 2026-09-17 resolves the wording above and records attempted configuration/context in the SSH check. The original review remains historical; see the [current contract](report-format.md#ssh-scope-and-repeated-settings) and [verification record](development.md#reliability-and-ssh-fixes--2026-09-17).
 
