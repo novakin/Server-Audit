@@ -15,6 +15,7 @@ This is an internal, read-only Ubuntu/Debian host audit using Python's standard 
 
 - Keep `audit.py` responsible for CLI/platform setup and output selection, `audit_runner.py` for explicit collection order, collectors for evidence and interpretation, and `reporting.py` for presentation/export. Renderers must not run checks or create a second set of policy findings.
 - Extend the responsible module first. Prefer small functions and pure parsers where useful. Follow existing names and data shapes. Add a dependency, framework, registry or abstraction only when a concrete requirement justifies its maintenance cost.
+- Avoid code golf and overengineering. Use clear names and straightforward control flow; do not optimize for line count with dense expressions. Reuse fitting owners/native tools before adding layers, extension points or configuration. A new helper, type or refactor needs a concrete requirement or invariant; prefer coherent ownership over a cramped patch.
 - Major collectors return JSON-serializable `(check, findings)` results; existing grouped domain helpers may retain their mapping interfaces. Do not print inside collectors. Inject the native command function so tests can supply deterministic responses.
 - Preserve prerequisites: SSH collection precedes accounts; running-service and Docker evidence precede application environment sources. Keep order explicit rather than introducing a dependency scheduler.
 - Use `command_runner.py` for ordinary native tools, with argument lists and no shell execution. Preserve executable lookup, locale and deadlines. Keep Gitleaks' separate runner for suppressed output, private scratch files and scanner deadlines. On timeout or interruption, stop its process group and reap the scanner before scratch cleanup; propagate interruption rather than reporting success.
@@ -54,6 +55,18 @@ This is an internal, read-only Ubuntu/Debian host audit using Python's standard 
 - Record consequential architecture decisions in `docs/architecture.md`: context/problem, decision and status, alternatives considered, consequences/limits, and verification or migration impact. Routine local edits do not need decision records. Introduce separate ADR files only if decision history outgrows that page.
 - Revisit an architecture decision when a concrete requirement changes its tradeoffs. Preserve the rationale and note what superseded it; do not treat today's flat layout or standard-library choice as a permanent ban on justified evolution.
 - If runtime files change, update the deployment file list. Keep generated reports and local scanner binaries out of source distribution. Do not introduce CI, packaging or publication workflows without a task requiring them.
+
+## GitHub contribution workflow
+
+- Use a dedicated branch and coherent commits for the requested change. Inspect existing working/staged scope and preserve unrelated work; do not bulk-commit a dirty tree. Do not amend, rebase, reset or force-push unless requested.
+- Link the relevant issue or roadmap action. Apply existing labels matching scope, such as `bug`, `enhancement`, `documentation` or `maintenance`, and assign the responsible maintainer, normally `novakin`. Preserve real approval boundaries; do not add `needs-approval` when the user has already authorized the work.
+- Every PR, including a draft, needs a meaningful description based on [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md). State the problem and resulting behavior, linked issue, scope/privacy/compatibility, actual verification/environment/results/skips, owning docs and remaining limits.
+- Fill and review the template before publishing. An empty checklist or subjective perfect score is insufficient. Check that the description matches the final diff, evidence is accurate, the base/head are correct and required metadata is set. Update title/description when scope changes; remove stale prompts and inapplicable sections.
+- Set actual GitHub labels and assignee; template text does not apply PR metadata. Keep commit, issue and PR text free of connector attribution, generated-by footers and AI co-author trailers.
+- Use an account-linked author/committer identity and verify published commits map to the intended GitHub account. Prefer correcting historical email association to rewriting history.
+- Cross-cutting agent/process changes need independent review of the final instructions, owning docs and templates. Use the user's requested reviewer effort and record findings, corrections and remaining limits before marking the work verified.
+- Before merge, review the complete diff, acceptance and affected failure/privacy/compatibility proof. Resolve findings and confirm owning docs are current. Push/PR creation follows the user's requested workflow; merge, publication and deployment remain separate requested actions.
+- Follow the detailed [contribution and merge instructions](docs/development.md#issues-pull-requests-and-merge-review). No CI, release process or runtime dependency is introduced by these conventions.
 
 ## Completion evidence
 

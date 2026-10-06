@@ -1,6 +1,6 @@
 # Development and verification
 
-[Documentation index](../README.md) · Internal engineering documentation · Reviewed 2026-09-17
+[Documentation index](../README.md) · Internal engineering documentation · Workflow reviewed 2026-10-06; runtime evidence remains dated below.
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
@@ -97,6 +97,26 @@ Do not add a new framework, documentation generator, CI pipeline or release proc
 ## Documentation maintenance
 
 README is the entry point. Operations owns setup and handling; audit reference owns detection scope; architecture owns extension rules; report format owns status semantics; this guide owns test workflow. Link to the owning page instead of repeating detailed facts. Update the reviewed date when behavior is checked against source. Keep historical verification labeled by date and avoid presenting test totals as permanent guarantees.
+
+## Issues, pull requests and merge review
+
+Use a dedicated branch and coherent commits; inspect the dirty/staged scope and preserve unrelated work. Link the issue or roadmap action, apply existing labels matching the change and assign the responsible maintainer, normally `novakin`. Labels such as `needs-approval` describe a real outstanding authorization requirement, not work the user has already approved.
+
+Every PR, including a draft, requires a meaningful description using the [PR template](../.github/PULL_REQUEST_TEMPLATE.md). State the problem and final behavior, issue/action, base/head, scope/privacy/compatibility, actual commands/environment/results/skips, owning docs and remaining limits. Set actual GitHub labels/assignee; a description field alone does not apply them.
+
+Review the filled description against the final diff before publication. Remove stale prompts, unsupported claims and inapplicable sections; update title/body when scope changes. Keep commits, issues and PRs free of connector attribution, generated-by footers and AI co-author trailers.
+
+Before merge, check the complete diff and acceptance, relevant failure/cancellation/privacy/compatibility proof, current owning docs and disclosed native/browser/live gaps. Resolve review findings without overwriting unrelated work. Push/PR creation follows the requested workflow; merge, distribution and deployment remain separate requested actions. These conventions add no runtime tooling, CI or release infrastructure.
+
+Use an account-linked author/committer identity and check published GitHub attribution. Correct an old email association without changing commit hashes when possible. For cross-cutting agent/process changes, obtain an independent review at the effort requested by the user, including ultra reasoning when specified; record findings/corrections and re-review material fixes before marking the work verified.
+
+Review code for clear names, straightforward control flow and coherent ownership. Avoid code golf and speculative layers/configuration/extension points. New abstractions or refactors need a concrete requirement or invariant; total complexity and maintainability matter more than line count.
+
+## Contribution workflow verification — 2026-10-06
+
+For [issue #43](https://github.com/novakin/Server-Audit/issues/43), `AGENTS.md`, this guide and the PR template establish complete descriptions, actual labels/assignee, account-linked commit identity, scoped commits, merge review and independent review at the requested effort. Readability and coherent ownership take priority over code golf and speculative layers. Existing read-only audit, privacy, dependency approval and operational boundaries remain in force.
+
+An independent ultra reasoning review covered all three files alongside the Android workflow documentation. It reported no material Server-Audit findings; the one Android contract-table correction is recorded in that repository. Targeted re-review confirmed the final workflow wording and correction with no material findings. Across both repositories, 14 Markdown files passed 127 local-link/fragment checks and fence/whitespace checks. Scoped diffs passed `git diff --check`. No runtime audit, host probe, Python suite, new dependency, deployment or merge was performed for this documentation change.
 
 ## Recorded verification — 2026-09-17
 
