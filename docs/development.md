@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) · Internal engineering documentation
 
-Last substantive update: 2026-09-18 (Europe/Berlin).
+Last substantive update: 2026-10-06 (Europe/Berlin).
 
 Maintain the internal tool with focused changes, reproducible fixtures and explicit validation limits.
 
@@ -85,6 +85,16 @@ Every change needs an impact assessment; only affected or justified records need
 For each affected subject, search old names, prerequisites, limits and approval/implementation statements in related README/agent/roadmap/guide sections. Distinguish historical statements from current contradictions. For CI work, check both the workflow procedure and claims such as "CI is proposed" elsewhere. Identify unrelated drift without silently adding a runtime change. Name the checked sections and any gaps in the PR; a generic "documentation checked" is insufficient.
 
 Significant architecture choices belong in the architecture guide; operational-policy choices belong in their owning guide. Include context, decision/status, rationale, alternatives, consequences, verification impact and a revisit condition. Record acceptance date and approval reference only where supported. A proposal, acceptance, code change, merge, release and deployment are different events. No separate decision framework is required for routine edits.
+
+### Pull requests and merge review
+
+Use a dedicated branch and coherent commits. Inspect working/staged scope; stage intentional paths or hunks and preserve unrelated work. Do not amend, rebase, reset or force-push unless requested. Use an account-linked author/committer identity and verify published GitHub attribution. Verifying an old email association can repair attribution without changing commit hashes.
+
+Every PR, including drafts and API-created PRs, requires a meaningful description using the [existing template](../.github/pull_request_template.md). Describe the problem and final behavior, issue/action, scope/privacy/compatibility, actual verification/environment/results/skips, owning/related documentation and remaining limits. Apply actual GitHub labels/assignee under [Issue metadata](#issue-metadata); fields in prose do not apply metadata. Review the filled description against the final diff before publication, update title/body when scope changes and remove stale prompts/inapplicable sections.
+
+For cross-cutting agent/process changes, obtain independent review at the user-requested effort, including ultra reasoning when specified. Record findings/corrections and re-review material fixes. Keep substantive historical assessments in [reviews](reviews/README.md); the PR owns its current acceptance record. Keep commit, Issue and PR text free of connector attribution, generated-by footers and AI co-author trailers.
+
+Before merge, confirm base/head and inspect the complete diff; check acceptance, affected failure/cancellation/privacy/compatibility proof, current documentation and actual CI. Resolve findings/conflicts and disclose missing native/browser/live proof. Push revised code and verify checks on the resulting revision. Merge only when requested and no in-scope blocker remains; distribution and deployment are separate actions. These conventions introduce no runtime, CI or release changes. See [PR completion](../AGENTS.md#pr-completion) and the [workflow review](reviews/2026-10-06-pr-review-workflow.md).
 
 ### Dates and historical records
 

@@ -6,6 +6,7 @@ For the older improvement plan's delivery reconciliation and remaining validatio
 
 | Record | Purpose |
 | --- | --- |
+| [2026-10-06 PR workflow review](2026-10-06-pr-review-workflow.md) | Requested independent ultra review, original branch scope and reconciliation with the existing contribution process |
 | [2026-10-05 codebase quality plan and reassessment](2026-10-05-codebase-quality-review.md) | Whole-code improvement scope, Ultra review corrections, validation basis and bounded reassessment |
 | [2026-09-18 code and functional assessment](2026-09-18-code-functional-assessment.md) | Original assessment and proportionality clarification, with separate revision reconciliation and canonical follow-up Issues |
 | [2026-09-18 Ubuntu CI and hardening](2026-09-18-ubuntu-ci-hardening.md) | Original CI acceptance and focused runtime findings, with canonical follow-up Issues |

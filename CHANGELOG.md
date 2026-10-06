@@ -15,6 +15,7 @@ results belong in the linked PRs and dated reviews.
 
 ### Changed
 
+- PR guidance explicitly covers filled draft descriptions, account-linked commits and independent review of cross-cutting agent/process changes. Reuse the existing PR template and metadata rules; preserve readable code and avoid speculative layers. See [PR #44](https://github.com/novakin/Server-Audit/pull/44) and the [merge procedure](docs/development.md#pull-requests-and-merge-review).
 - Issue handling defaults new agent-created Issues and pull requests to `novakin`, uses a small category/approval label set, and distinguishes resolving Development links from non-closing references. Ownership stays in GitHub metadata; no issue-management bot is added. See [Issue metadata](docs/development.md#issue-metadata).
 - Runtime, collectors, templates and tests use a shallow package layout while retaining the two launchers and copy-and-run operation ([PR #4](https://github.com/novakin/Server-Audit/pull/4)). Copy the complete runtime package into a clean destination; do not mix old root modules with it.
 
